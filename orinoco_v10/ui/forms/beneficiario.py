@@ -18,12 +18,16 @@ class BeneficiarioFormPage(FormPage):
         )
         r = registro or {}
         w = self.FIELD_W
-        self.e_ced = F.label_entry(self.col_left, "Cédula", r.get("cedula", ""), width=w,
-                                   digits_only=True)
+        self.e_ced = F.label_entry(
+            self.col_left, "Cédula", r.get("cedula", ""), width=w,
+            digits_only=True, ph=f"{F.CEDULA_MIN_LEN}-{F.CEDULA_MAX_LEN} dígitos",
+        )
         self.e_nom = F.label_entry(self.col_left, "Nombre", r.get("nombre", ""), width=w)
         self.e_ape = F.label_entry(self.col_left, "Apellido", r.get("apellido", ""), width=w)
-        self.e_tel = F.label_entry(self.col_left, "Teléfono", r.get("telefono", "") or "", width=w,
-                                   phone=True)
+        self.e_tel = F.label_entry(
+            self.col_left, "Teléfono", r.get("telefono", "") or "", width=w,
+            phone=True, ph=f"Ej. 04141234567 ({F.PHONE_MIN_DIGITS}-{F.PHONE_MAX_DIGITS} dígitos)",
+        )
         self.e_cor = F.label_entry(self.col_right, "Correo (opcional)", r.get("correo", "") or "", width=w)
         self.e_emb = F.label_entry(self.col_right, "Embarcación", r.get("embarcacion", "") or "", width=w)
         self.e_mot = F.label_entry(self.col_right, "Motor", r.get("motor", "") or "", width=w)

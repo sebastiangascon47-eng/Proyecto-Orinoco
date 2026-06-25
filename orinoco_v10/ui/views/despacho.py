@@ -1,7 +1,6 @@
 """Vista: Despachos."""
 from __future__ import annotations
 import customtkinter as ctk
-from core import permissions as perm
 from core.theme import C, FONT_SM, CTRL_H, ROWS_PER_PAGE
 from ui import forms
 from ui import modals
@@ -9,7 +8,7 @@ from ui.components.widgets import dropdown
 from ui.views.base import BaseView, ListFormMixin
 from ui.views.utils import despacho_estado
 
-_FILTROS = ("Pendientes de pago", "Todos", "Pagados", "Anulados")
+_FILTROS = ("Pendientes de pago", "Todos", "Pagados")
 
 
 class DespachoView(ListFormMixin, BaseView):
@@ -17,13 +16,12 @@ class DespachoView(ListFormMixin, BaseView):
         self._init_list_form_hosts()
         self.page_title("Despacho de combustible", parent=self._list_host)
         bar = self.page_toolbar(parent=self._list_host)
-        self._filtro = ctk.StringVar(value=_FILTROS[0])
         ctk.CTkLabel(bar.left, text="Ver:", font=FONT_SM,
                      text_color=C["text2"]).pack(side="left", padx=(0, 8))
-        fil = dropdown(bar.left, list(_FILTROS), width=200, height=CTRL_H)
-        fil.set(_FILTROS[0])
-        fil.configure(command=self._on_filtro)
-        fil.pack(side="left")
+        self._fil = dropdown(bar.left, list(_FILTROS), width=200, height=CTRL_H)
+        self._fil.set(_FILTROS[0])
+        self._fil.configure(command=self._on_filtro)
+        self._fil.pack(side="left")
         self.toolbar_btn(bar.right, "Editar despacho", command=self._editar_despacho,
                          variant="secondary", width=168).pack(side="right", padx=(0, 8))
         self.toolbar_btn(bar.right, "Nuevo despacho", command=self._nuevo,
@@ -43,17 +41,16 @@ class DespachoView(ListFormMixin, BaseView):
 
     def _filtered_rows(self):
         rows = self.db.get_despachos(limit=2000, incluir_anulados=True)
-        f = self._filtro.get() if hasattr(self, "_filtro") else _FILTROS[0]
+        f = self._fil.get() if hasattr(self, "_fil") else _FILTROS[0]
         if f == "Pendientes de pago":
             return [r for r in rows if r["estado"] == "registrado" and not int(r["pagado"])]
         if f == "Pagados":
             return [r for r in rows if r["estado"] == "registrado" and int(r["pagado"])]
-        if f == "Anulados":
-            return [r for r in rows if r["estado"] == "anulado"]
         return rows
 
     def _refresh(self):
         rows = self._filtered_rows()
+        self._ptbl.set_hidden_columns(set())
         self._ptbl.table._last_fp = None
         self._ptbl.load([self._fmt(r) for r in rows])
 
@@ -93,8 +90,6 @@ class DespachoView(ListFormMixin, BaseView):
     def _row_actions(self, row, _idx):
         r = row["_raw"]
         items = [("Ver", lambda rd=r: self._ver(rd), False)]
-        if perm.can_edit_despacho(self.user) and self._editable(r):
-            items.append(("Editar", lambda rd=r: self._abrir_editar(rd), False))
         if self.can_delete and r["estado"] == "registrado":
             items.append(("Anular", lambda rd=r: self._anular(rd), True))
         return items
@@ -119,10 +114,7 @@ class DespachoView(ListFormMixin, BaseView):
         ]
         if r["estado"] == "anulado":
             fields.append(("Motivo de anulación", r["motivo_anulacion"] or "—"))
-        actions = []
-        if perm.can_edit_despacho(self.user) and self._editable(r):
-            actions.append(("Editar", "primary", lambda rd=r: self._abrir_editar(rd)))
-        modals.DetailModal(self.app, "Ver despacho", fields, actions)
+        modals.DetailModal(self.app, "Ver despacho", fields, [])
 
     def _anular(self, r):
         modals.ConfirmModal(

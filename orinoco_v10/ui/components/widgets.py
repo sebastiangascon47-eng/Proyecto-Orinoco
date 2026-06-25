@@ -265,6 +265,8 @@ class _TableCore:
         self._batch_job = None
         self._data_cols = []
         self._last_fp = None
+        self._hidden_cols: set[str] = set()
+        self._hdr_labels: dict[str, ctk.CTkLabel] = {}
         if row_actions:
             self.columns.append(("_actions", "⋮", self.ACTION_W))
         self._data_cols = [c for c in self.columns if c[0] != "_actions"]
@@ -290,10 +292,34 @@ class _TableCore:
     def _apply_col_grid(self, frame):
         """Una sola grilla: columnas de datos proporcionales, acciones fijas."""
         for i, (key, _, hint) in enumerate(self.columns):
-            if key == "_actions":
+            if key in self._hidden_cols:
+                frame.grid_columnconfigure(i, weight=0, minsize=0)
+            elif key == "_actions":
                 frame.grid_columnconfigure(i, weight=0, minsize=self.ACTION_W)
             else:
                 frame.grid_columnconfigure(i, weight=max(int(hint), 1))
+
+    def set_hidden_columns(self, keys: set[str] | frozenset[str] | None):
+        """Oculta columnas por clave sin reconstruir la tabla."""
+        self._hidden_cols = set(keys or ())
+        self._apply_col_grid(self._grid)
+        for key, lbl in self._hdr_labels.items():
+            col_i = self._col_idx(key)
+            if col_i is None:
+                continue
+            if key in self._hidden_cols:
+                lbl.grid_remove()
+            else:
+                lbl.grid(row=0, column=col_i, sticky="ew", padx=self._cell_pad(key))
+        for entry in self._pool:
+            if entry.get("idx", -1) >= 0:
+                self._show_pool_row(entry)
+
+    def _col_idx(self, key: str) -> int | None:
+        for i, (k, _, _) in enumerate(self.columns):
+            if k == key:
+                return i
+        return None
 
     def _cancel_batch(self):
         if self._batch_job is not None:
@@ -318,14 +344,17 @@ class _TableCore:
         hdr_bg.grid(row=0, column=0, columnspan=len(self.columns), sticky="ew")
         for i, (key, label, _) in enumerate(self.columns):
             anchor = self._col_anchor(key)
-            ctk.CTkLabel(
+            lbl = ctk.CTkLabel(
                 self._grid,
                 text=label.upper() if key != "_actions" else label,
                 font=(FONT_LABEL[0], 9, "bold"),
                 text_color=C["neutral_dark"],
                 anchor=anchor,
                 fg_color=C["table_header"],
-            ).grid(row=0, column=i, sticky="ew", padx=self._cell_pad(key))
+            )
+            self._hdr_labels[key] = lbl
+            if key not in self._hidden_cols:
+                lbl.grid(row=0, column=i, sticky="ew", padx=self._cell_pad(key))
 
     def _make_pool_row(self, grid_row: int) -> dict:
         bg = C["card"]
@@ -339,7 +368,8 @@ class _TableCore:
                 self._grid, text="", font=FONT_SM, height=self.ROW_H,
                 anchor=anchor, text_color=C["text"], fg_color=bg,
             )
-            lbl.grid(row=grid_row, column=i, sticky="ew", padx=self._cell_pad(key))
+            if key not in self._hidden_cols:
+                lbl.grid(row=grid_row, column=i, sticky="ew", padx=self._cell_pad(key))
             cells.append((key, lbl))
         entry: dict = {
             "grid_row": grid_row, "bg_frame": bg_frame, "cells": cells,
@@ -347,7 +377,8 @@ class _TableCore:
         }
         if self.row_actions:
             act_wrap = ctk.CTkFrame(self._grid, fg_color=bg, height=self.ROW_H)
-            act_wrap.grid(row=grid_row, column=self._action_col, sticky="ew")
+            if "_actions" not in self._hidden_cols:
+                act_wrap.grid(row=grid_row, column=self._action_col, sticky="ew")
             menu = RowActionMenu(act_wrap, get_items=lambda e=entry: self._menu_items(e))
             menu.place(relx=0.5, rely=0.5, anchor="center")
             entry["act_wrap"] = act_wrap
@@ -393,9 +424,15 @@ class _TableCore:
         grid_row = entry["grid_row"]
         entry["bg_frame"].grid(row=grid_row, column=0, columnspan=len(self.columns), sticky="ew")
         for i, (key, lbl) in enumerate(entry["cells"]):
-            lbl.grid(row=grid_row, column=i, sticky="ew", padx=self._cell_pad(key))
+            if key in self._hidden_cols:
+                lbl.grid_remove()
+            else:
+                lbl.grid(row=grid_row, column=i, sticky="ew", padx=self._cell_pad(key))
         if entry.get("act_wrap"):
-            entry["act_wrap"].grid(row=grid_row, column=self._action_col, sticky="ew")
+            if "_actions" in self._hidden_cols:
+                entry["act_wrap"].grid_remove()
+            else:
+                entry["act_wrap"].grid(row=grid_row, column=self._action_col, sticky="ew")
 
     def _apply_row(self, idx: int, row: dict):
         entry = self._pool[idx]
@@ -597,6 +634,9 @@ class PaginatedTable(ctk.CTkFrame):
 
     def cancel_load(self):
         self._tbl.cancel_load()
+
+    def set_hidden_columns(self, keys: set[str] | frozenset[str] | None):
+        self._tbl.set_hidden_columns(keys)
 
     def load(self, rows: list):
         self._all_rows = rows

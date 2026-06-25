@@ -1,7 +1,8 @@
 """Vista: Inventario."""
 from __future__ import annotations
+import customtkinter as ctk
 from core import permissions as perm
-from core.theme import ROWS_PER_PAGE, ROWS_PER_PAGE_COMPACT
+from core.theme import C, FONT_H1, PAD, ROWS_PER_PAGE_COMPACT
 from ui import modals
 from ui.views.base import BaseView
 from ui.views.utils import movimiento_label, movimiento_tipo
@@ -9,25 +10,41 @@ from ui.views.utils import movimiento_label, movimiento_tipo
 
 class InventarioView(BaseView):
     def _build(self):
-        self.page_title("Inventario")
-        bar = self.page_toolbar()
+        self._page.grid_columnconfigure(0, weight=1)
+        self._page.grid_rowconfigure(1, weight=1)
+
+        top = ctk.CTkFrame(self._page, fg_color="transparent")
+        top.grid(row=0, column=0, sticky="ew", padx=PAD, pady=(PAD, 6))
+        ctk.CTkLabel(top, text="Inventario", font=FONT_H1,
+                     text_color=C["text"]).pack(anchor="w")
+        bar = self.page_toolbar(parent=top)
         if perm.can_manage_fuel_types(self.user):
             self.toolbar_btn(bar.right, "Nuevo tipo", command=self._nuevo,
                              width=148).pack(side="right")
-        panel = self.page_list_panel(expand=False)
+
+        body = ctk.CTkScrollableFrame(
+            self._page, fg_color="transparent",
+            scrollbar_button_color=C["elevated"],
+            scrollbar_button_hover_color=C["border"],
+        )
+        body.grid(row=1, column=0, sticky="nsew")
+
+        panel = self.page_list_panel(expand=False, parent=body)
         self._ptbl = self.page_paginated_table(panel, [
             ("tipo", "Tipo", 160), ("litros", "Disponible", 130),
             ("capacidad", "Capacidad", 130), ("minimo", "Mínimo alerta", 130),
             ("estado", "Estado", 120),
         ], page_size=ROWS_PER_PAGE_COMPACT, row_actions=self._row_actions, expand=False)
-        self.section_title("Últimos movimientos (kardex)")
-        mov_panel = self.page_list_panel()
+        self.section_title("Últimos movimientos (kardex)", parent=body)
+        mov_panel = self.page_list_panel(expand=False, parent=body)
         self._mov = self.page_paginated_table(mov_panel, [
             ("fecha", "Fecha", 130), ("tipo", "Tipo", 130), ("mov", "Movimiento", 110),
             ("litros", "Litros", 110), ("motivo", "Motivo", 200), ("operador", "Operador", 120),
-        ], page_size=ROWS_PER_PAGE_COMPACT)
+        ], page_size=ROWS_PER_PAGE_COMPACT, expand=False)
+        ctk.CTkFrame(body, fg_color="transparent", height=24).pack()
 
     def _refresh(self):
+        self._ptbl.table._last_fp = None
         self._ptbl.load([{
             "tipo": r["tipo"], "litros": f"{r['litros_actual']:,.0f} L",
             "capacidad": f"{r['capacidad']:,.0f} L", "minimo": f"{r['minimo_alerta']:,.0f} L",
@@ -35,6 +52,7 @@ class InventarioView(BaseView):
                       (" · Bajo" if r["activo"] and r["litros_actual"] <= r["minimo_alerta"] else ""),
             "_raw": r,
         } for r in self.db.get_inventario()])
+        self._mov.table._last_fp = None
         self._mov.load([{
             "fecha": m["fecha"][:16], "tipo": m["tipo"],
             "mov": movimiento_tipo(m["tipo_movimiento"]),

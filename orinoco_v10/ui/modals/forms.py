@@ -27,10 +27,11 @@ def _combo(parent, values, value=None, state="normal", width=MW):
 
 
 def _label_entry(parent, label, value="", show="", width=MW, ph="",
-                 numeric=False, decimal=True, digits_only=False, phone=False):
+                 numeric=False, decimal=True, digits_only=False, phone=False,
+                 max_length: int | None = None):
     return F.label_entry(parent, label, value=value, show=show, width=width, ph=ph,
                          numeric=numeric, decimal=decimal,
-                         digits_only=digits_only, phone=phone)
+                         digits_only=digits_only, phone=phone, max_length=max_length)
 
 
 def _label_combo(parent, label, values, value=None, state="normal", width=MW):
