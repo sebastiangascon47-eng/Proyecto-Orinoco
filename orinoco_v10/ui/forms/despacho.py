@@ -337,6 +337,7 @@ class DespachoFormPage(FormPage):
     def _on_metodo_change(self, _c=None):
         met = self.c_met.get()
         if met in METODOS_SIN_REFERENCIA:
+            F.clear_input_validation(self.e_ref)
             self.e_ref.configure(state="normal")
             self.e_ref.delete(0, "end")
             self.e_ref.insert(0, "Se asigna al registrar el despacho")
@@ -344,7 +345,9 @@ class DespachoFormPage(FormPage):
         else:
             self.e_ref.configure(state="normal")
             self.e_ref.delete(0, "end")
-            self.e_ref.configure(placeholder_text="Número de referencia")
+            self.e_ref.configure(
+                placeholder_text=f"Solo números ({F.REFERENCIA_MIN_LEN}-{F.REFERENCIA_MAX_LEN} dígitos)")
+            F.bind_digits_input(self.e_ref, self._pago_box, F.REFERENCIA_MAX_LEN)
 
     def _ben_sel(self):
         if self._sel_ben_id is not None:
@@ -368,6 +371,11 @@ class DespachoFormPage(FormPage):
         if cobrar:
             met_id = self._metodos[self.c_met.get()]
             ref = self.e_ref.get().strip()
+            if self.c_met.get() not in METODOS_SIN_REFERENCIA:
+                err = F.validate_referencia(ref)
+                if err:
+                    self.set_error(err)
+                    return
         try:
             desp_id = self.db.registrar_venta(
                 ben["id"], inv_id, litros, monto, self.user["nombre"],

@@ -11,6 +11,8 @@ CEDULA_MAX_LEN = 8
 PHONE_MAX_LEN = 15
 PHONE_MIN_DIGITS = 10
 PHONE_MAX_DIGITS = 11
+REFERENCIA_MIN_LEN = 4
+REFERENCIA_MAX_LEN = 20
 
 
 def lbl(parent, text):
@@ -68,6 +70,28 @@ def validate_phone(value: str) -> str | None:
         return (f"El teléfono debe tener entre {PHONE_MIN_DIGITS} y "
                 f"{PHONE_MAX_DIGITS} dígitos.")
     return None
+
+
+def validate_referencia(value: str) -> str | None:
+    ref = value.strip()
+    if not ref:
+        return "Indique el número de referencia."
+    if not ref.isdigit():
+        return "La referencia solo debe contener números."
+    if len(ref) < REFERENCIA_MIN_LEN:
+        return f"La referencia debe tener al menos {REFERENCIA_MIN_LEN} dígitos."
+    if len(ref) > REFERENCIA_MAX_LEN:
+        return f"La referencia no puede superar {REFERENCIA_MAX_LEN} dígitos."
+    return None
+
+
+def bind_digits_input(entry, parent, max_len: int):
+    reg = parent.register(lambda p, m=max_len: _digits_ok(p, m))
+    entry.configure(validate="key", validatecommand=(reg, "%P"))
+
+
+def clear_input_validation(entry):
+    entry.configure(validate="none")
 
 
 def entry(parent, value="", show="", ph="", width=410, height=40,

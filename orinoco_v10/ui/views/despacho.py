@@ -49,8 +49,9 @@ class DespachoView(ListFormMixin, BaseView):
         return rows
 
     def _refresh(self):
+        f = self._fil.get() if hasattr(self, "_fil") else _FILTROS[0]
+        self._ptbl.set_hidden_columns({"id"} if f == "Pendientes de pago" else set())
         rows = self._filtered_rows()
-        self._ptbl.set_hidden_columns(set())
         self._ptbl.table._last_fp = None
         self._ptbl.load([self._fmt(r) for r in rows])
 

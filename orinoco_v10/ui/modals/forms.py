@@ -378,6 +378,7 @@ class PagoModal(Modal):
         from core.business import METODOS_SIN_REFERENCIA, referencia_efectivo
         met = self.c_met.get()
         if met in METODOS_SIN_REFERENCIA:
+            F.clear_input_validation(self.e_ref)
             ref = referencia_efectivo(met, self.d["id"])
             self.e_ref.configure(state="normal")
             self.e_ref.delete(0, "end")
@@ -386,7 +387,8 @@ class PagoModal(Modal):
         else:
             self.e_ref.configure(state="normal")
             self.e_ref.delete(0, "end")
-            self.e_ref.configure(placeholder_text="Número de referencia")
+            self.e_ref.configure(placeholder_text=f"Solo números ({F.REFERENCIA_MIN_LEN}-{F.REFERENCIA_MAX_LEN} dígitos)")
+            F.bind_digits_input(self.e_ref, self.body, F.REFERENCIA_MAX_LEN)
 
     def _save(self):
         try:
@@ -397,6 +399,12 @@ class PagoModal(Modal):
             return
         met = self.c_met.get()
         ref = self.e_ref.get().strip()
+        from core.business import METODOS_SIN_REFERENCIA
+        if met not in METODOS_SIN_REFERENCIA:
+            err = F.validate_referencia(ref)
+            if err:
+                self.set_error(err)
+                return
         met_id = self._metodos[met]
         try:
             self.db.add_pago(self.d["id"], self.d["beneficiario_id"], monto,

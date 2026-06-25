@@ -70,18 +70,20 @@ class PagosView(BaseView):
         self._cards.update("Monto por cobrar", f"{sc['monto_pendiente']:,.2f} Bs")
         self._cards.update("Cobrado hoy", f"{sc['cobrado_hoy']:,.2f} Bs")
         self._pend.table._last_fp = None
+        self._pend.set_hidden_columns({"id"})
         self._pend.load([{
             "id": r["id"], "fecha": r["fecha"][:16], "cedula": r["cedula"],
             "beneficiario": r["beneficiario"], "litros": f"{r['litros']:,.0f} L",
             "monto": f"{r['monto_bs']:,.2f}", "_raw": r,
         } for r in self.db.get_despachos_pendientes()])
         self._done.table._last_fp = None
+        self._done.set_hidden_columns(set())
         self._done.load([{
             "id": p["id"], "fecha": p["fecha"][:16], "beneficiario": p["beneficiario"],
             "monto": f"{p['monto_bs']:,.2f}", "referencia": p["referencia"] or "—",
             "metodo": p["metodo"],
             "estado": pago_estado(p), "_raw": p,
-        } for p in self.db.get_pagos(limit=500, incluir_anulados=True)])
+        } for p in self.db.get_pagos(limit=500, incluir_anulados=False)])
 
     def _pend_actions(self, row, _idx):
         r = row["_raw"]
@@ -150,4 +152,4 @@ class PagosView(BaseView):
         self.db.log(self.user["id"], self.user["nombre"], "Pagos",
                     "Anular", f"#{p['id']} — {motivo}")
         self._on_change()
-        self.app.toast("Pago anulado")
+        self.app.toast("Pago anulado y retirado de la lista")

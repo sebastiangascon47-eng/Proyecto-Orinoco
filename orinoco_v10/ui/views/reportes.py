@@ -26,7 +26,7 @@ class ReportesView(BaseView):
         top.grid(row=0, column=0, sticky="ew")
 
         self.page_title("Reportes y análisis",
-                         "Genere y exporte la actividad de despachos", parent=top)
+                         "Consulte y exporte la actividad de despachos", parent=top)
         bar = card(top)
         bar.pack(fill="x", padx=PAD, pady=(2, 8))
         inner = ctk.CTkFrame(bar, fg_color="transparent", height=CTRL_H + 8)
@@ -41,10 +41,8 @@ class ReportesView(BaseView):
         self._periodo = dropdown(left, self.PERIODOS, width=180)
         self._periodo.set(self._periodo_key)
         self._periodo.configure(command=self._on_periodo)
-        self._periodo.pack(side="left", padx=(0, 12))
-        btn(left, "Generar", command=self.schedule_refresh, variant="primary",
-            width=130, height=BTN_H).pack(side="left")
-        btn(right, "Exportar CSV", command=self._export, variant="secondary",
+        self._periodo.pack(side="left")
+        btn(right, "Exportar CSV", command=self._export, variant="primary",
             width=160, height=BTN_H).pack(side="right")
 
         body = ctk.CTkScrollableFrame(
@@ -82,7 +80,7 @@ class ReportesView(BaseView):
 
     def _on_periodo(self, value: str):
         self._periodo_key = value
-        self.schedule_refresh()
+        self._refresh()
 
     def _rango(self):
         p = self._periodo_key
@@ -127,8 +125,6 @@ class ReportesView(BaseView):
         self._tbl._last_fp = None
         self._tbl.load(rows)
         self._load_chart(self._chart.scope)
-        self.db.log(self.user["id"], self.user["nombre"], "Reportes",
-                    "Generar", f"{self._periodo_key} — {st['n']} despachos")
 
     def _load_chart(self, scope):
         if not self._rows_cache and scope == "tx":

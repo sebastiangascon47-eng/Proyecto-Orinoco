@@ -25,4 +25,6 @@ def resolver_referencia_pago(metodo: str, referencia: str, despacho_id: int) -> 
         raise ValueError(
             "Indique el número de referencia (transferencia, Biopago, etc.)."
         )
+    if not ref.isdigit():
+        raise ValueError("La referencia solo debe contener números.")
     return ref
