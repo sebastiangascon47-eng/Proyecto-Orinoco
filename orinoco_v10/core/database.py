@@ -8,9 +8,13 @@ from __future__ import annotations
 import sqlite3
 import hashlib
 import secrets
-from datetime import datetime
+import os
+import random
+from datetime import datetime, timedelta
 
-SCHEMA_VERSION = "10"
+from app.config import DATA_DIR, DB_PATH
+
+SCHEMA_VERSION = "11"
 PBKDF2_ITERS = 100_000
 
 
@@ -30,15 +34,27 @@ def _hash(texto: str, salt: str) -> str:
 
 class DB:
     def __init__(self, path: str | None = None):
-        self.path = path or "orinoco.db"
+        os.makedirs(DATA_DIR, exist_ok=True)
+        self.path = path or DB_PATH
+        self._conn: sqlite3.Connection | None = None
         self._init()
 
     def con(self) -> sqlite3.Connection:
-        c = sqlite3.connect(self.path)
-        c.row_factory = sqlite3.Row
-        c.execute("PRAGMA foreign_keys = ON")
-        c.execute("PRAGMA journal_mode = WAL")
-        return c
+        """Conexión persistente (evita abrir/cerrar SQLite en cada consulta)."""
+        if self._conn is None:
+            self._conn = sqlite3.connect(self.path, check_same_thread=False)
+            self._conn.row_factory = sqlite3.Row
+            self._conn.execute("PRAGMA foreign_keys = ON")
+            self._conn.execute("PRAGMA journal_mode = WAL")
+            self._conn.execute("PRAGMA synchronous = NORMAL")
+            self._conn.execute("PRAGMA cache_size = -16000")
+            self._conn.execute("PRAGMA temp_store = MEMORY")
+        return self._conn
+
+    def close(self):
+        if self._conn is not None:
+            self._conn.close()
+            self._conn = None
 
     # ── columnas / utilidades de esquema ─────────────────────────
     @staticmethod
@@ -59,6 +75,7 @@ class DB:
 
             self._crear_tablas(c)
             self._seed_catalogos(c)
+            self._asegurar_config_extra(c)
 
             if es_v9:
                 self._migrar_desde_v9(c)
@@ -69,11 +86,25 @@ class DB:
                 self._asegurar_columnas_v10(c)
 
             self._asegurar_admin(c)
+            self._asegurar_operador_demo(c)
+            self._aplicar_migraciones(c)
 
             c.execute(
                 "INSERT OR REPLACE INTO configuracion (clave, valor) VALUES ('schema_version', ?)",
                 (SCHEMA_VERSION,),
             )
+            self._crear_indices(c)
+
+    def _crear_indices(self, c):
+        """Índices para acelerar listados y reportes."""
+        c.executescript("""
+        CREATE INDEX IF NOT EXISTS idx_despachos_fecha ON despachos(fecha DESC);
+        CREATE INDEX IF NOT EXISTS idx_despachos_estado ON despachos(estado, pagado);
+        CREATE INDEX IF NOT EXISTS idx_pagos_fecha ON pagos(fecha DESC);
+        CREATE INDEX IF NOT EXISTS idx_bitacora_fecha ON bitacora(fecha DESC);
+        CREATE INDEX IF NOT EXISTS idx_beneficiarios_activo ON beneficiarios(activo, apellido, nombre);
+        CREATE INDEX IF NOT EXISTS idx_movimientos_fecha ON movimientos_inventario(fecha DESC);
+        """)
 
     def _crear_tablas(self, c):
         c.executescript("""
@@ -191,15 +222,31 @@ class DB:
         """)
 
     def _seed_catalogos(self, c):
-        for m in ("Biopago", "Transferencia", "Efectivo Bs", "Efectivo USD"):
+        from core.catalogs import METODOS_PAGO
+        for m in METODOS_PAGO:
             c.execute("INSERT OR IGNORE INTO metodos_pago (nombre) VALUES (?)", (m,))
         defaults = {
             "nombre_estacion": "Estación Fluvial Orinoco C.A.",
             "rif": "J-31086589-2",
             "moneda": "Bs",
             "alerta_minima_inventario": "2000",
+            "precio_litro_gasoil": "0.50",
+            "precio_litro_gasolina_91": "0.55",
+            "precio_litro_gasolina_95": "0.60",
         }
         for k, v in defaults.items():
+            c.execute(
+                "INSERT OR IGNORE INTO configuracion (clave, valor) VALUES (?, ?)", (k, v)
+            )
+
+    def _asegurar_config_extra(self, c):
+        """Claves de configuración añadidas en versiones recientes."""
+        extras = {
+            "precio_litro_gasoil": "0.50",
+            "precio_litro_gasolina_91": "0.55",
+            "precio_litro_gasolina_95": "0.60",
+        }
+        for k, v in extras.items():
             c.execute(
                 "INSERT OR IGNORE INTO configuracion (clave, valor) VALUES (?, ?)", (k, v)
             )
@@ -215,6 +262,18 @@ class DB:
             VALUES (?,?,?,?,?,?,?,?,1)
         """, ("admin", "Administrador", "", _hash("admin123", salt), salt,
               "¿Nombre de la estación?", _hash("orinoco", salt), "administrador"))
+
+    def _asegurar_operador_demo(self, c):
+        if c.execute("SELECT 1 FROM operadores WHERE usuario='operador'").fetchone():
+            return
+        salt = _new_salt()
+        c.execute("""
+            INSERT INTO operadores
+                (usuario, nombre, apellido, clave_hash, salt,
+                 pregunta_seguridad, respuesta_hash, rol, activo)
+            VALUES (?,?,?,?,?,?,?,?,1)
+        """, ("operador", "Operador", "Sistema", _hash("operador123", salt), salt,
+              "¿Nombre de la estación?", _hash("orinoco", salt), "operador"))
 
     # ── migración v9 → v10 ───────────────────────────────────────
     def _migrar_desde_v9(self, c):
@@ -305,7 +364,8 @@ class DB:
 
     def _asegurar_columnas_v10(self, c):
         if c.execute("SELECT COUNT(*) FROM inventario").fetchone()[0] == 0:
-            for t in ("Gasoil", "Gasolina 91", "Gasolina 95"):
+            from core.catalogs import TIPOS_COMBUSTIBLE
+            for t in TIPOS_COMBUSTIBLE:
                 c.execute("INSERT OR IGNORE INTO inventario (tipo) VALUES (?)", (t,))
 
     # ── seed demo (solo instalación nueva) ───────────────────────
@@ -352,6 +412,116 @@ class DB:
                         (despacho_id, beneficiario_id, monto_bs, referencia, metodo_pago_id, metodo, operador)
                         VALUES (?,?,?,?,?, 'Biopago', 'Administrador')""",
                         (did, ben_id, monto, f"BIO{did:04d}", met_id))
+
+    def _aplicar_migraciones(self, c):
+        prev = c.execute(
+            "SELECT valor FROM configuracion WHERE clave='schema_version'"
+        ).fetchone()
+        prev_v = prev["valor"] if prev else "0"
+        if prev_v < "11":
+            self._migrar_v11_bulk(c)
+
+    def _migrar_v11_bulk(self, c):
+        """Carga masiva de datos de operación (una sola vez)."""
+        if c.execute("SELECT valor FROM configuracion WHERE clave='bulk_v11'").fetchone():
+            return
+
+        nombres = [
+            "Carlos", "Ana", "Luis", "Rosa", "Miguel", "Carmen", "Jorge", "Elena",
+            "Ricardo", "Patricia", "Fernando", "Gabriela", "Héctor", "Isabel", "Raúl",
+            "Sandra", "Oscar", "Teresa", "Daniel", "Beatriz", "Andrés", "Lucía",
+            "Francisco", "Mónica", "Alberto", "Natalia", "Roberto", "Claudia",
+        ]
+        apellidos = [
+            "Pérez", "Rodríguez", "Gómez", "Fernández", "López", "Martínez", "Díaz",
+            "Hernández", "Torres", "Ramírez", "Flores", "Morales", "Vargas", "Rivas",
+            "Castro", "Mendoza", "Silva", "Rojas", "Guerrero", "Salazar", "Peña",
+        ]
+        embarcaciones = [
+            "El Caimán", "La Sirena", "San José", "Mar Caribe", "Estrella Norte",
+            "Boca de Dragón", "Río Bravo", "La Tortuga", "Pescador I", "Pescador II",
+            "Orinoco Express", "Delta Sur", "Caño Negro", "Aguila Real", "Trinidad",
+        ]
+        motores = ["Yamaha 40HP", "Yamaha 75HP", "Suzuki 60HP", "Mercury 90HP", "Evinrude 50HP"]
+
+        for i in range(95):
+            ced = f"{31000000 + i}"
+            c.execute("""INSERT OR IGNORE INTO beneficiarios
+                (cedula, nombre, apellido, telefono, embarcacion, motor, creado_en)
+                VALUES (?,?,?,?,?,?,?)""",
+                (ced, random.choice(nombres), random.choice(apellidos),
+                 f"04{random.randint(12,26)}-{random.randint(1000000,9999999)}",
+                 random.choice(embarcaciones), random.choice(motores),
+                 (datetime.now() - timedelta(days=random.randint(30, 540))).strftime("%Y-%m-%d %H:%M:%S")))
+
+        c.execute("UPDATE inventario SET litros_actual = capacidad * 0.88 WHERE activo=1")
+
+        inv_rows = c.execute(
+            "SELECT id, tipo, litros_actual, capacidad FROM inventario WHERE activo=1"
+        ).fetchall()
+        inv_by_tipo = {r["tipo"]: r for r in inv_rows}
+        bids = [r["id"] for r in c.execute("SELECT id FROM beneficiarios WHERE activo=1").fetchall()]
+        bio = c.execute("SELECT id FROM metodos_pago WHERE nombre='Biopago'").fetchone()
+        met_id = bio["id"] if bio else 1
+        tipos = list(inv_by_tipo.keys()) or ["Gasoil"]
+        precios = {"Gasoil": 5.0, "Gasolina 91": 5.5, "Gasolina 95": 6.0}
+        random.seed(2026)
+
+        for _ in range(420):
+            ben_id = random.choice(bids)
+            tipo = random.choice(tipos)
+            inv = inv_by_tipo.get(tipo)
+            if not inv:
+                continue
+            litros = float(random.choice([40, 60, 80, 100, 120, 150, 180, 200, 250]))
+            if inv["litros_actual"] < litros:
+                continue
+            monto = round(litros * precios.get(tipo, 5.0), 2)
+            dias = random.randint(0, 200)
+            fecha = (datetime.now() - timedelta(days=dias,
+                     hours=random.randint(6, 18),
+                     minutes=random.randint(0, 59))).strftime("%Y-%m-%d %H:%M:%S")
+            pagado = random.random() < 0.68
+            cur = c.execute("""INSERT INTO despachos
+                (beneficiario_id, inventario_id, tipo, litros, monto_bs, operador, pagado, fecha)
+                VALUES (?,?,?,?,?,?,?,?)""",
+                (ben_id, inv["id"], tipo, litros, monto, "Administrador", int(pagado), fecha))
+            did = cur.lastrowid
+            c.execute("UPDATE inventario SET litros_actual = litros_actual - ?, actualizado_en=? WHERE id=?",
+                      (litros, _now(), inv["id"]))
+            inv_by_tipo[tipo] = dict(inv)
+            inv_by_tipo[tipo]["litros_actual"] -= litros
+            c.execute("""INSERT INTO movimientos_inventario
+                (inventario_id, tipo_movimiento, litros, referencia_despacho_id, motivo, operador, fecha)
+                VALUES (?, 'salida', ?, ?, 'Despacho de combustible', 'Administrador', ?)""",
+                (inv["id"], litros, did, fecha))
+            if pagado:
+                c.execute("""INSERT INTO pagos
+                    (despacho_id, beneficiario_id, monto_bs, referencia, metodo_pago_id, metodo, operador, fecha)
+                    VALUES (?,?,?,?,?, 'Biopago', 'Administrador', ?)""",
+                    (did, ben_id, monto, f"BIO{did:05d}", met_id, fecha))
+
+        for inv in inv_rows:
+            litros = round(float(inv["capacidad"]) * 0.05, 0)
+            if litros <= 0:
+                litros = 500
+            fecha = (datetime.now() - timedelta(days=random.randint(10, 120))).strftime("%Y-%m-%d %H:%M:%S")
+            c.execute("""INSERT INTO movimientos_inventario
+                (inventario_id, tipo_movimiento, litros, motivo, operador, fecha)
+                VALUES (?, 'entrada', ?, 'Reabastecimiento programado', 'Administrador', ?)""",
+                (inv["id"], litros, fecha))
+
+        modulos = ["Despachos", "Pagos", "Beneficiarios", "Inventario", "Reportes"]
+        acciones = ["Registrar", "Actualizar", "Consultar", "Exportar", "Anular"]
+        for _ in range(80):
+            fecha = (datetime.now() - timedelta(days=random.randint(0, 90),
+                     hours=random.randint(8, 17))).strftime("%Y-%m-%d %H:%M:%S")
+            c.execute("""INSERT INTO bitacora (operador, modulo, accion, detalle, fecha)
+                VALUES (?,?,?,?,?)""",
+                ("Administrador", random.choice(modulos), random.choice(acciones),
+                 f"Operación #{random.randint(100, 9999)}", fecha))
+
+        c.execute("INSERT OR REPLACE INTO configuracion (clave, valor) VALUES ('bulk_v11', '1')")
 
     # ════════════════════ AUTENTICACIÓN ═════════════════════════
     def auth(self, usuario: str, clave: str):
@@ -609,16 +779,26 @@ class DB:
     def add_despacho(self, ben_id: int, inventario_id: int, litros: float,
                      monto: float, operador: str, obs: str = "") -> int:
         with self.con() as c:
-            inv = c.execute("SELECT tipo, litros_actual FROM inventario WHERE id=?",
-                            (inventario_id,)).fetchone()
-            tipo = inv["tipo"] if inv else "Gasoil"
+            inv = c.execute(
+                "SELECT tipo, litros_actual FROM inventario WHERE id=? AND activo=1",
+                (inventario_id,),
+            ).fetchone()
+            if not inv:
+                raise ValueError("El tipo de combustible no está disponible.")
+            if litros <= 0:
+                raise ValueError("Los litros deben ser mayores a cero.")
+            if litros > inv["litros_actual"]:
+                raise ValueError(
+                    f"Inventario insuficiente. Disponible: {inv['litros_actual']:,.0f} L."
+                )
+            tipo = inv["tipo"]
             cur = c.execute("""
                 INSERT INTO despachos
                     (beneficiario_id, inventario_id, tipo, litros, monto_bs, operador, observaciones)
                 VALUES (?,?,?,?,?,?,?)
             """, (ben_id, inventario_id, tipo, litros, monto, operador, obs))
             desp_id = cur.lastrowid
-            c.execute("""UPDATE inventario SET litros_actual = MAX(0, litros_actual - ?),
+            c.execute("""UPDATE inventario SET litros_actual = litros_actual - ?,
                          actualizado_en=? WHERE id=?""", (litros, _now(), inventario_id))
             c.execute("""INSERT INTO movimientos_inventario
                          (inventario_id, tipo_movimiento, litros, referencia_despacho_id,
@@ -626,6 +806,86 @@ class DB:
                          VALUES (?, 'salida', ?, ?, 'Despacho de combustible', ?)""",
                       (inventario_id, litros, desp_id, operador))
             return desp_id
+
+    def registrar_venta(self, ben_id: int, inventario_id: int, litros: float,
+                        monto: float, operador: str, obs: str = "",
+                        cobrar_ahora: bool = False, referencia: str = "",
+                        metodo_pago_id: int | None = None) -> int:
+        """Registra despacho y, opcionalmente, el cobro en una sola operación."""
+        from core.business import METODOS_SIN_REFERENCIA
+        if monto <= 0:
+            raise ValueError("Indique el monto total a cobrar al cliente.")
+        with self.con() as c:
+            inv = c.execute(
+                "SELECT tipo, litros_actual FROM inventario WHERE id=? AND activo=1",
+                (inventario_id,),
+            ).fetchone()
+            if not inv:
+                raise ValueError("El tipo de combustible no está disponible.")
+            if litros <= 0:
+                raise ValueError("Los litros deben ser mayores a cero.")
+            if litros > inv["litros_actual"]:
+                raise ValueError(
+                    f"Inventario insuficiente. Disponible: {inv['litros_actual']:,.0f} L."
+                )
+            metodo_nombre = None
+            if cobrar_ahora:
+                if not metodo_pago_id:
+                    raise ValueError("Seleccione el método de pago.")
+                m = c.execute("SELECT nombre FROM metodos_pago WHERE id=?",
+                              (metodo_pago_id,)).fetchone()
+                if not m:
+                    raise ValueError("Método de pago no válido.")
+                metodo_nombre = m["nombre"]
+                ref = referencia.strip()
+                if metodo_nombre not in METODOS_SIN_REFERENCIA and not ref:
+                    raise ValueError(
+                        "Indique el número de referencia (transferencia, Biopago, etc.)."
+                    )
+                if metodo_nombre in METODOS_SIN_REFERENCIA and not ref:
+                    ref = "Efectivo"
+
+            tipo = inv["tipo"]
+            cur = c.execute("""
+                INSERT INTO despachos
+                    (beneficiario_id, inventario_id, tipo, litros, monto_bs, operador,
+                     observaciones, pagado)
+                VALUES (?,?,?,?,?,?,?,?)
+            """, (ben_id, inventario_id, tipo, litros, monto, operador, obs,
+                  1 if cobrar_ahora else 0))
+            desp_id = cur.lastrowid
+            c.execute("""UPDATE inventario SET litros_actual = litros_actual - ?,
+                         actualizado_en=? WHERE id=?""", (litros, _now(), inventario_id))
+            c.execute("""INSERT INTO movimientos_inventario
+                         (inventario_id, tipo_movimiento, litros, referencia_despacho_id,
+                          motivo, operador)
+                         VALUES (?, 'salida', ?, ?, 'Despacho de combustible', ?)""",
+                      (inventario_id, litros, desp_id, operador))
+            if cobrar_ahora:
+                c.execute("""
+                    INSERT INTO pagos
+                        (despacho_id, beneficiario_id, monto_bs, referencia,
+                         metodo_pago_id, metodo, operador)
+                    VALUES (?,?,?,?,?,?,?)
+                """, (desp_id, ben_id, monto, ref, metodo_pago_id, metodo_nombre, operador))
+            return desp_id
+
+    def get_precio_litro(self, tipo_combustible: str) -> float:
+        """Precio sugerido por litro según configuración."""
+        clave_map = {
+            "Gasoil": "precio_litro_gasoil",
+            "Gasolina 91": "precio_litro_gasolina_91",
+            "Gasolina 95": "precio_litro_gasolina_95",
+        }
+        clave = clave_map.get(tipo_combustible, "precio_litro_gasoil")
+        with self.con() as c:
+            row = c.execute(
+                "SELECT valor FROM configuracion WHERE clave=?", (clave,)
+            ).fetchone()
+        try:
+            return float(row["valor"]) if row else 0.0
+        except (TypeError, ValueError):
+            return 0.0
 
     def get_despachos(self, limit: int = 500, desde: str | None = None,
                       hasta: str | None = None, incluir_anulados: bool = True) -> list:
@@ -824,6 +1084,9 @@ class DB:
                 "litros_hoy": c.execute(
                     "SELECT COALESCE(SUM(litros),0) FROM despachos "
                     "WHERE estado='registrado' AND DATE(fecha)=DATE('now','localtime')").fetchone()[0],
+                "despachos_hoy": c.execute(
+                    "SELECT COUNT(*) FROM despachos "
+                    "WHERE estado='registrado' AND DATE(fecha)=DATE('now','localtime')").fetchone()[0],
                 "litros_mes": c.execute(
                     "SELECT COALESCE(SUM(litros),0) FROM despachos "
                     "WHERE estado='registrado' AND strftime('%Y-%m',fecha)=strftime('%Y-%m','now','localtime')"
@@ -833,6 +1096,19 @@ class DB:
                 "recaudado": c.execute(
                     "SELECT COALESCE(SUM(monto_bs),0) FROM pagos WHERE estado='registrado'").fetchone()[0],
             }
+
+    def stats_cobros(self) -> dict:
+        """Resumen para el módulo de pagos (montos, no conteos del panel de inicio)."""
+        pend = self.get_despachos_pendientes()
+        with self.con() as c:
+            cobrado_hoy = c.execute(
+                "SELECT COALESCE(SUM(monto_bs),0) FROM pagos "
+                "WHERE estado='registrado' AND DATE(fecha)=DATE('now','localtime')"
+            ).fetchone()[0]
+        return {
+            "monto_pendiente": sum(d["monto_bs"] for d in pend),
+            "cobrado_hoy": cobrado_hoy,
+        }
 
     # ── Series temporales para gráficas ──────────────────────────
     def get_series_despachos(self, dias: int = 14) -> list[dict]:

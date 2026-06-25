@@ -4,7 +4,7 @@ Panel oscuro + formulario claro. Incluye recuperación de contraseña.
 """
 import customtkinter as ctk
 from core.theme import C, FONT_SM, FONT_LABEL, R_LG
-from ui.widgets import field, btn
+from ui.components.widgets import field, btn
 
 
 class LoginWindow(ctk.CTk):
@@ -31,28 +31,26 @@ class LoginWindow(ctk.CTk):
                      corner_radius=0).pack(side="left", fill="y")
         wrap = ctk.CTkFrame(left, fg_color="transparent")
         wrap.pack(expand=True, padx=48)
-        ctk.CTkLabel(wrap, text="⛽", font=(FONT_LABEL[0], 80),
-                     text_color=C["red"]).pack(pady=(0, 18))
-        ctk.CTkLabel(wrap, text="ORINOCO", font=(FONT_LABEL[0], 26, "bold"),
-                     text_color="#FFFFFF").pack()
+        ctk.CTkLabel(wrap, text="ORINOCO", font=(FONT_LABEL[0], 32, "bold"),
+                     text_color=C["text_inv"]).pack(pady=(0, 6))
         ctk.CTkLabel(wrap, text="Estación Fluvial · C.A.", font=(FONT_LABEL[0], 13),
                      text_color=C["text_sidebar2"]).pack(pady=(2, 0))
-        ctk.CTkFrame(wrap, height=1, fg_color="#2D2D3E",
+        ctk.CTkFrame(wrap, height=1, fg_color=C["sidebar_border"],
                      corner_radius=0).pack(fill="x", pady=30)
-        for icon, text in [
-            ("⛽", "Control de despacho de combustible"),
-            ("👥", "Gestión de pescadores"),
-            ("💳", "Seguimiento de pagos"),
-            ("📊", "Reportes y bitácora de actividad"),
+        for text in [
+            "Control de despacho de combustible",
+            "Gestión de pescadores",
+            "Seguimiento de pagos",
+            "Reportes y bitácora de actividad",
         ]:
             row = ctk.CTkFrame(wrap, fg_color="transparent")
             row.pack(anchor="w", pady=4)
-            ctk.CTkLabel(row, text=icon, font=(FONT_LABEL[0], 14),
-                         text_color=C["red"]).pack(side="left", padx=(0, 10))
+            ctk.CTkLabel(row, text="—", font=(FONT_LABEL[0], 11, "bold"),
+                         text_color=C["red"], width=14).pack(side="left", padx=(0, 8))
             ctk.CTkLabel(row, text=text, font=(FONT_LABEL[0], 11),
-                         text_color="#9CA3AF").pack(side="left")
+                         text_color=C["text_sidebar"]).pack(side="left")
         ctk.CTkLabel(left, text="v10.0  ·  Sistema de Información",
-                     font=(FONT_LABEL[0], 10), text_color="#3D3D55").pack(
+                     font=(FONT_LABEL[0], 10), text_color=C["text_sidebar2"]).pack(
             side="bottom", pady=20)
 
         # Panel derecho (formulario)
@@ -61,10 +59,10 @@ class LoginWindow(ctk.CTk):
         form = ctk.CTkFrame(right, fg_color="transparent")
         form.place(relx=0.5, rely=0.5, anchor="center")
         ctk.CTkLabel(form, text="Bienvenido", font=(FONT_LABEL[0], 30, "bold"),
-                     text_color=C["text"]).pack(anchor="w")
+                     text_color=C["text"]).pack(anchor="center")
         ctk.CTkLabel(form, text="Inicia sesión para acceder al sistema",
                      font=(FONT_LABEL[0], 12), text_color=C["text3"]).pack(
-            anchor="w", pady=(4, 30))
+            anchor="center", pady=(4, 30))
 
         for lbl_text, attr, ph, show_ in [
             ("USUARIO", "_user", "Nombre de usuario", ""),
@@ -77,20 +75,17 @@ class LoginWindow(ctk.CTk):
             setattr(self, attr, e)
 
         self._err = ctk.CTkLabel(form, text="", font=FONT_SM, text_color=C["red"])
-        self._err.pack(anchor="w", pady=(0, 10))
+        self._err.pack(anchor="center", pady=(0, 10))
 
         ctk.CTkButton(form, text="Entrar al sistema", command=self._login,
                       fg_color=C["red"], hover_color=C["red_hover"],
-                      text_color="#FFFFFF", font=(FONT_LABEL[0], 13, "bold"),
-                      height=48, width=340, corner_radius=R_LG).pack(fill="x")
+                      text_color=C["text_inv"], font=(FONT_LABEL[0], 13, "bold"),
+                      height=48, width=340, corner_radius=R_LG).pack()
 
         ctk.CTkButton(form, text="¿Olvidó su contraseña?", command=self._recuperar,
-                      fg_color="transparent", hover_color=C["bg"],
+                      fg_color="transparent", hover_color=C["elevated"],
                       text_color=C["text2"], font=(FONT_LABEL[0], 11),
-                      height=30, width=340).pack(pady=(8, 0))
-        ctk.CTkLabel(form, text="Credenciales por defecto: admin / admin123",
-                     font=(FONT_LABEL[0], 10), text_color=C["text3"]).pack(
-            anchor="w", pady=(8, 0))
+                      height=36, width=340).pack(pady=(10, 0))
 
         self.bind("<Return>", lambda _: self._login())
         self._user.focus_set()
@@ -99,7 +94,7 @@ class LoginWindow(ctk.CTk):
         u = self._user.get().strip()
         p = self._pwd.get()
         if not u or not p:
-            self._err.configure(text="⚠  Completa todos los campos.")
+            self._err.configure(text="Complete todos los campos.")
             return
         user = self.db.auth(u, p)
         if user:
@@ -107,10 +102,10 @@ class LoginWindow(ctk.CTk):
             self.db.log(ud["id"], ud["nombre"], "Autenticación",
                         "Iniciar sesión", ud["usuario"])
             self.destroy()
-            from ui.app import MainApp
+            from ui.shell.app import MainApp
             MainApp(self.db, ud).mainloop()
         else:
-            self._err.configure(text="⚠  Usuario o contraseña incorrectos.")
+            self._err.configure(text="Usuario o contraseña incorrectos.")
             self._pwd.delete(0, "end")
             self._pwd.focus_set()
 

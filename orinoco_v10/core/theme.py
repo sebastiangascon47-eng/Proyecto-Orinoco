@@ -1,68 +1,88 @@
 """
-theme.py — Design system v5
+theme.py — Design system Orinoco v10
 Estación Fluvial Orinoco C.A.
+Paleta unificada: rojo corporativo + neutros slate.
 """
 import customtkinter as ctk
 
 # ── Paleta ───────────────────────────────────────────────────────
 C = {
-    # Superficie
-    "bg":            "#F0F2F5",
-    "sidebar":       "#111318",   # casi negro, máximo contraste
-    "sidebar_hover": "#1E2028",
+    # Superficies
+    "bg":            "#F4F5F7",
+    "sidebar":       "#12141A",
+    "sidebar_hover": "#1C1F26",
+    "sidebar_border":"#252830",
     "sidebar_sel":   "#C41E1E",
     "card":          "#FFFFFF",
-    "elevated":      "#E9EBEE",
+    "elevated":      "#EBEDF0",
     "input":         "#FFFFFF",
-    "input_focus":   "#FAFBFF",
-    "border":        "#D1D5DB",
-    "border_focus":  "#CC0000",
+    "input_focus":   "#FEFEFE",
+    "border":        "#E2E5EA",
+    "border_focus":  "#C41E1E",
 
-    # Rojo corporativo
-    "red":           "#CC0000",
-    "red_hover":     "#A80000",
-    "red_dark":      "#8B0000",
-    "red_light":     "#FEF2F2",
-    "red_mid":       "#FCA5A5",
+    # Marca — rojo corporativo Orinoco
+    "red":           "#C41E1E",
+    "red_hover":     "#A31818",
+    "red_dark":      "#7F1414",
+    "red_light":     "#FDF2F2",
+    "red_mid":       "#FECACA",
+    "red_subtle":    "#FEE8E8",
 
-    # Verde
-    "green":         "#15803D",
-    "green_dark":    "#14532D",
-    "green_bg":      "#F0FDF4",
-    "green_border":  "#86EFAC",
-    "green_hover":   "#166534",
+    # Semánticos (tonos apagados, sin arcoíris)
+    "accent":        "#C41E1E",
+    "success":       "#3D5A4C",
+    "success_bg":    "#F2F6F4",
+    "success_border":"#C5D4CC",
+    "warning":       "#8B6914",
+    "warning_bg":    "#FAF6EE",
+    "warning_border":"#E8DFC8",
+    "neutral":       "#475569",
+    "neutral_dark":  "#334155",
+    "neutral_bg":    "#F1F3F5",
 
-    # Ámbar
-    "amber":         "#B45309",
-    "amber_dark":    "#78350F",
-    "amber_bg":      "#FFFBEB",
-    "amber_border":  "#FCD34D",
-    "amber_hover":   "#92400E",
-
-    # Azul
-    "blue":          "#1D4ED8",
-    "blue_dark":     "#1E3A8A",
-    "blue_bg":       "#EFF6FF",
-    "blue_hover":    "#1E40AF",
+    # Acentos KPI — variación sutil entre tarjetas
+    "metric_1":      "#C41E1E",
+    "metric_2":      "#334155",
+    "metric_3":      "#64748B",
+    "metric_4":      "#7F1414",
 
     # Texto
-    "text":          "#0F172A",   # slate-900
-    "text2":         "#475569",   # slate-600
-    "text3":         "#94A3B8",   # slate-400
-    "text_sidebar":  "#CBD5E1",
-    "text_sidebar2": "#64748B",
+    "text":          "#1A1D21",
+    "text2":         "#5C6570",
+    "text3":         "#9AA3AD",
+    "text_sidebar":  "#C8CDD4",
+    "text_sidebar2": "#6B7280",
     "text_inv":      "#FFFFFF",
 
     # Tabla
-    "table_header":  "#F8FAFC",
+    "table_header":  "#F8F9FA",
     "table_alt":     "#FAFBFC",
-    "table_sel":     "#EFF6FF",
-    "table_sel_text":"#1D4ED8",
-    "table_hover":   "#F1F5F9",
+    "table_sel":     "#FDF2F2",
+    "table_sel_text":"#C41E1E",
+    "table_hover":   "#F4F5F7",
+
+    # Compatibilidad con referencias heredadas
+    "green":         "#3D5A4C",
+    "green_dark":    "#2D4438",
+    "green_bg":      "#F2F6F4",
+    "green_border":  "#C5D4CC",
+    "green_hover":   "#2D4438",
+    "amber":         "#8B6914",
+    "amber_dark":    "#6B5010",
+    "amber_bg":      "#FAF6EE",
+    "amber_border":  "#E8DFC8",
+    "amber_hover":   "#6B5010",
+    "blue":          "#334155",
+    "blue_dark":     "#1E293B",
+    "blue_bg":       "#F1F3F5",
+    "blue_hover":    "#1E293B",
 }
 
+# Atajos para tarjetas de métricas por posición
+M = (C["metric_1"], C["metric_2"], C["metric_3"], C["metric_4"])
+
 # ── Tipografía ────────────────────────────────────────────────────
-_F = "Segoe UI"   # Windows / system fallback en macOS
+_F = "Segoe UI"
 
 FONT_H1     = (_F, 24, "bold")
 FONT_H2     = (_F, 18, "bold")
@@ -86,6 +106,16 @@ R_XL   = 18
 PAD    = 24
 PAD_SM = 14
 PAD_XS = 8
+
+# Controles unificados (simetría en toda la app)
+BTN_H   = 40
+CTRL_H  = 40
+ROW_H   = 44
+HDR_H   = 40
+
+# Listas paginadas (sin scroll interno en la tabla)
+ROWS_PER_PAGE = 10
+ROWS_PER_PAGE_COMPACT = 6
 
 
 def setup():

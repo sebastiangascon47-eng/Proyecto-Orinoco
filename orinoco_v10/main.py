@@ -1,14 +1,15 @@
 """
 main.py — Punto de entrada
-Estación Fluvial Orinoco C.A.  v5
+Estación Fluvial Orinoco C.A.
 """
 import sys
 import os
+
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from core.theme import setup
 from core.database import DB
-from ui.login import LoginWindow
+from ui.shell.login import LoginWindow
 
 
 def main():
