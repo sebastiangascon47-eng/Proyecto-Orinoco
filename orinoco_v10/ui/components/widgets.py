@@ -379,6 +379,16 @@ class _TableCore:
             if entry.get("act_wrap"):
                 entry["act_wrap"].grid_remove()
 
+    def _trim_pool_visible(self, n: int):
+        """Oculta filas del pool que quedaron fuera del lote actual."""
+        for i in range(n, len(self._pool)):
+            entry = self._pool[i]
+            entry["bg_frame"].grid_remove()
+            for _, lbl in entry["cells"]:
+                lbl.grid_remove()
+            if entry.get("act_wrap"):
+                entry["act_wrap"].grid_remove()
+
     def _show_pool_row(self, entry: dict):
         grid_row = entry["grid_row"]
         entry["bg_frame"].grid(row=grid_row, column=0, columnspan=len(self.columns), sticky="ew")
@@ -433,6 +443,7 @@ class _TableCore:
             self._last_fp = fp
             for i, row in enumerate(rows):
                 self._update_cells(i, row)
+            self._trim_pool_visible(n)
             return
 
         if self._empty_lbl:
@@ -456,6 +467,7 @@ class _TableCore:
             self._ensure_pool(n)
             for i, row in enumerate(rows):
                 self._apply_row(i, row)
+            self._trim_pool_visible(n)
         else:
             self._batch_render()
 
@@ -470,6 +482,7 @@ class _TableCore:
             self._batch_job = self.after(16, self._batch_render)
         else:
             self._batch_job = None
+            self._trim_pool_visible(len(self._rows_data))
 
     @staticmethod
     def _sem_color(val: str) -> str:
@@ -588,6 +601,7 @@ class PaginatedTable(ctk.CTkFrame):
     def load(self, rows: list):
         self._all_rows = rows
         self._page = 0
+        self._tbl._last_fp = None
         self._render()
 
     def _pages(self) -> int:
@@ -600,6 +614,7 @@ class PaginatedTable(ctk.CTkFrame):
         self._page = max(0, min(self._page, pages - 1))
         start = self._page * self.page_size
         chunk = self._all_rows[start:start + self.page_size]
+        self._tbl._last_fp = None
         self._tbl.load(chunk)
         if total == 0:
             self._info.configure(text="0 registros")

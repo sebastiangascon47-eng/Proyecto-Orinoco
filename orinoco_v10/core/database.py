@@ -22,6 +22,23 @@ def _now() -> str:
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 
+def _fecha_rango_conds(desde: str | None, hasta: str | None,
+                       col: str = "fecha") -> tuple[list[str], list]:
+    """Condiciones SQL por fecha calendario (misma lógica que el panel Inicio)."""
+    conds, params = [], []
+    if desde and hasta and desde == hasta:
+        conds.append(f"DATE({col}) = DATE(?)")
+        params.append(desde)
+    else:
+        if desde:
+            conds.append(f"DATE({col}) >= DATE(?)")
+            params.append(desde)
+        if hasta:
+            conds.append(f"DATE({col}) <= DATE(?)")
+            params.append(hasta)
+    return conds, params
+
+
 def _new_salt() -> str:
     return secrets.token_hex(16)
 
@@ -812,7 +829,7 @@ class DB:
                         cobrar_ahora: bool = False, referencia: str = "",
                         metodo_pago_id: int | None = None) -> int:
         """Registra despacho y, opcionalmente, el cobro en una sola operación."""
-        from core.business import METODOS_SIN_REFERENCIA
+        from core.business import resolver_referencia_pago
         if monto <= 0:
             raise ValueError("Indique el monto total a cobrar al cliente.")
         with self.con() as c:
@@ -837,13 +854,6 @@ class DB:
                 if not m:
                     raise ValueError("Método de pago no válido.")
                 metodo_nombre = m["nombre"]
-                ref = referencia.strip()
-                if metodo_nombre not in METODOS_SIN_REFERENCIA and not ref:
-                    raise ValueError(
-                        "Indique el número de referencia (transferencia, Biopago, etc.)."
-                    )
-                if metodo_nombre in METODOS_SIN_REFERENCIA and not ref:
-                    ref = "Efectivo"
 
             tipo = inv["tipo"]
             cur = c.execute("""
@@ -862,6 +872,7 @@ class DB:
                          VALUES (?, 'salida', ?, ?, 'Despacho de combustible', ?)""",
                       (inventario_id, litros, desp_id, operador))
             if cobrar_ahora:
+                ref = resolver_referencia_pago(metodo_nombre, referencia, desp_id)
                 c.execute("""
                     INSERT INTO pagos
                         (despacho_id, beneficiario_id, monto_bs, referencia,
@@ -894,10 +905,10 @@ class DB:
                       b.embarcacion
                FROM despachos d JOIN beneficiarios b ON b.id = d.beneficiario_id"""
         conds = []
-        if desde:
-            conds.append("d.fecha >= ?"); params.append(desde)
-        if hasta:
-            conds.append("d.fecha <= ?"); params.append(hasta + " 23:59:59")
+        if desde or hasta:
+            fc, fp = _fecha_rango_conds(desde, hasta, "d.fecha")
+            conds.extend(fc)
+            params.extend(fp)
         if not incluir_anulados:
             conds.append("d.estado = 'registrado'")
         if conds:
@@ -985,16 +996,16 @@ class DB:
             return True
 
     def stats_despachos(self, desde: str | None = None, hasta: str | None = None) -> dict:
-        params, cond = [], "WHERE estado='registrado'"
-        if desde:
-            cond += " AND fecha >= ?"; params.append(desde)
-        if hasta:
-            cond += " AND fecha <= ?"; params.append(hasta + " 23:59:59")
+        params, conds = [], ["estado='registrado'"]
+        fc, fp = _fecha_rango_conds(desde, hasta)
+        conds.extend(fc)
+        params.extend(fp)
+        where = " AND ".join(conds)
         with self.con() as c:
             r = c.execute(f"""SELECT COUNT(*) n, COALESCE(SUM(litros),0) litros,
                               COALESCE(SUM(monto_bs),0) monto,
                               COALESCE(SUM(pagado),0) pagados
-                              FROM despachos {cond}""", params).fetchone()
+                              FROM despachos WHERE {where}""", params).fetchone()
             return {"n": r["n"], "litros": r["litros"], "monto": r["monto"],
                     "pagados": r["pagados"], "pendientes": r["n"] - r["pagados"]}
 
@@ -1010,10 +1021,12 @@ class DB:
     # ════════════════════ PAGOS ═════════════════════════════════
     def add_pago(self, despacho_id: int, ben_id: int, monto: float,
                  ref: str, metodo_pago_id: int, operador: str = "Sistema") -> int:
+        from core.business import resolver_referencia_pago
         with self.con() as c:
             m = c.execute("SELECT nombre FROM metodos_pago WHERE id=?",
                           (metodo_pago_id,)).fetchone()
             metodo = m["nombre"] if m else "Biopago"
+            ref = resolver_referencia_pago(metodo, ref, despacho_id)
             cur = c.execute("""
                 INSERT INTO pagos
                     (despacho_id, beneficiario_id, monto_bs, referencia,
@@ -1159,6 +1172,21 @@ class DB:
                 WHERE estado='registrado' AND fecha >= datetime('now','localtime', ?)
                 GROUP BY DATE(fecha) ORDER BY d
             """, (f"-{dias} days",)).fetchall()
+            return [(r["d"][5:], r["v"]) for r in rows]
+
+    def get_series_despachos_rango(self, desde: str | None, hasta: str | None) -> list:
+        """Serie diaria de litros para un rango de fechas (reportes)."""
+        conds, params = ["estado='registrado'"], []
+        fc, fp = _fecha_rango_conds(desde, hasta)
+        conds.extend(fc)
+        params.extend(fp)
+        where = " AND ".join(conds)
+        with self.con() as c:
+            rows = c.execute(f"""
+                SELECT DATE(fecha) d, COALESCE(SUM(litros),0) v FROM despachos
+                WHERE {where}
+                GROUP BY DATE(fecha) ORDER BY d
+            """, params).fetchall()
             return [(r["d"][5:], r["v"]) for r in rows]
 
     def get_series_pagos(self, dias: int = 14) -> list[dict]:

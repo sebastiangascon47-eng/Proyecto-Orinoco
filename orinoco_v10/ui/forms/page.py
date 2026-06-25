@@ -47,6 +47,7 @@ class FormPage(ctk.CTkFrame):
         card = ctk.CTkFrame(outer, fg_color=C["card"], corner_radius=R_LG,
                             border_width=1, border_color=C["border"])
         card.pack(anchor="n", fill="both", expand=True)
+        self._card = card
 
         scroll = ctk.CTkScrollableFrame(
             card, fg_color="transparent",
@@ -54,6 +55,7 @@ class FormPage(ctk.CTkFrame):
             scrollbar_button_hover_color=C["border"],
         )
         scroll.pack(fill="both", expand=True, padx=PAD_SM, pady=PAD_SM)
+        self._scroll = scroll
 
         self._full = ctk.CTkFrame(scroll, fg_color="transparent")
         self._full.pack(fill="x")
@@ -89,6 +91,15 @@ class FormPage(ctk.CTkFrame):
     @property
     def full_width(self):
         return self._full
+
+    def use_wizard_body(self) -> ctk.CTkFrame:
+        """Sustituye el scroll por un contenedor fijo (formularios por pasos)."""
+        self._scroll.pack_forget()
+        self._full.pack_forget()
+        self._col0.master.pack_forget()
+        host = ctk.CTkFrame(self._card, fg_color="transparent")
+        host.pack(fill="both", expand=True, padx=PAD_SM, pady=PAD_SM)
+        return host
 
     def set_error(self, msg: str):
         self._err.configure(text=msg)

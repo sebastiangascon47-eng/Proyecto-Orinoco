@@ -34,8 +34,9 @@ def entry(parent, value="", show="", ph="", width=410, height=40,
     return e
 
 
-def combo(parent, values, value=None, state="normal", width=410):
-    d = dropdown(parent, values, width=width, state=state)
+def combo(parent, values, value=None, state="normal", width=410, readonly=False):
+    st = "readonly" if readonly else state
+    d = dropdown(parent, values, width=width, state=st)
     if value is not None and value in values:
         d.set(value)
     elif values:
@@ -51,6 +52,7 @@ def label_entry(parent, label, value="", show="", width=410, ph="",
                  numeric=numeric, decimal=decimal)
 
 
-def label_combo(parent, label, values, value=None, state="normal", width=410):
+def label_combo(parent, label, values, value=None, state="normal", width=410,
+                readonly=False):
     lbl(parent, label)
-    return combo(parent, values, value=value, state=state, width=width)
+    return combo(parent, values, value=value, state=state, width=width, readonly=readonly)

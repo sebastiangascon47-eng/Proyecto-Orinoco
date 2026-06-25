@@ -314,24 +314,26 @@ class AjusteModal(Modal):
 
 
 # ════════════════════ PAGO (modal corto) ════════════════════════
-class SeleccionDespachoPagoModal(Modal):
-    """Elige un despacho pendiente antes de abrir el formulario de pago."""
+class SeleccionDespachoModal(Modal):
+    """Elige un despacho pendiente (pago o edición)."""
 
-    def __init__(self, app, despachos: list, on_pick):
+    def __init__(self, app, despachos: list, on_pick, *,
+                 title="Seleccionar despacho",
+                 message="Elija el despacho pendiente.",
+                 btn_text="Continuar"):
         self.app, self._on_pick = app, on_pick
         self._map = {
             f"#{d['id']} · {d['beneficiario']} · {d['litros']:,.0f} L · "
             f"{d['monto_bs']:,.2f} Bs": d
             for d in despachos
         }
-        super().__init__(app, "Seleccionar despacho", width=520, height=340)
+        super().__init__(app, title, width=520, height=340)
         ctk.CTkLabel(
-            self.body,
-            text="Elija el despacho pendiente de pago que desea cobrar.",
+            self.body, text=message,
             font=FONT_BODY, text_color=C["text"], wraplength=MW, justify="left",
         ).pack(anchor="w", pady=(8, 4))
         self.c_desp = _label_combo(self.body, "Despacho pendiente", list(self._map.keys()))
-        self.add_buttons("Continuar", self._ok, variant="primary")
+        self.add_buttons(btn_text, self._ok, variant="primary")
 
     def _ok(self):
         d = self._map.get(self.c_desp.get())
@@ -340,6 +342,16 @@ class SeleccionDespachoPagoModal(Modal):
             return
         self.destroy()
         self._on_pick(dict(d))
+
+
+class SeleccionDespachoPagoModal(SeleccionDespachoModal):
+    def __init__(self, app, despachos: list, on_pick):
+        super().__init__(
+            app, despachos, on_pick,
+            title="Seleccionar despacho",
+            message="Elija el despacho pendiente de pago que desea cobrar.",
+            btn_text="Continuar",
+        )
 
 
 class PagoModal(Modal):
@@ -361,13 +373,20 @@ class PagoModal(Modal):
         self.add_buttons("Registrar pago", self._save, variant="primary")
 
     def _on_metodo(self, _c=None):
-        from core.business import METODOS_SIN_REFERENCIA
-        if self.c_met.get() in METODOS_SIN_REFERENCIA:
+        from core.business import METODOS_SIN_REFERENCIA, referencia_efectivo
+        met = self.c_met.get()
+        if met in METODOS_SIN_REFERENCIA:
+            ref = referencia_efectivo(met, self.d["id"])
+            self.e_ref.configure(state="normal")
             self.e_ref.delete(0, "end")
-            self.e_ref.configure(placeholder_text="—")
+            self.e_ref.insert(0, ref)
+            self.e_ref.configure(state="readonly")
+        else:
+            self.e_ref.configure(state="normal")
+            self.e_ref.delete(0, "end")
+            self.e_ref.configure(placeholder_text="Número de referencia")
 
     def _save(self):
-        from core.business import METODOS_SIN_REFERENCIA
         try:
             monto = float(self.e_mon.get().replace(",", "."))
             assert monto > 0
@@ -376,14 +395,13 @@ class PagoModal(Modal):
             return
         met = self.c_met.get()
         ref = self.e_ref.get().strip()
-        if met not in METODOS_SIN_REFERENCIA and not ref:
-            self.set_error("Indique la referencia del pago.")
-            return
-        if met in METODOS_SIN_REFERENCIA and not ref:
-            ref = "Efectivo"
         met_id = self._metodos[met]
-        self.db.add_pago(self.d["id"], self.d["beneficiario_id"], monto,
-                         ref, met_id, self.user["nombre"])
+        try:
+            self.db.add_pago(self.d["id"], self.d["beneficiario_id"], monto,
+                             ref, met_id, self.user["nombre"])
+        except ValueError as e:
+            self.set_error(str(e))
+            return
         self.db.log(self.user["id"], self.user["nombre"], "Pagos",
                     "Registrar", f"Despacho #{self.d['id']} · {monto:,.2f} Bs")
         self.destroy(); self.on_done(); self.app.toast("Pago registrado")

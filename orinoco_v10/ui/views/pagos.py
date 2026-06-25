@@ -85,7 +85,7 @@ class PagosView(BaseView):
 
     def _pend_actions(self, row, _idx):
         r = row["_raw"]
-        items = [("Registrar pago", lambda: self._abrir_pago(dict(r)), False)]
+        items: list = []
         if perm.can_edit_despacho(self.user) and self._despacho_editable(r):
             items.append(("Editar", lambda: modals.DespachoEditModal(
                 self.app, self.db, self.user, self._on_change, dict(r)), False))
