@@ -25,8 +25,10 @@ class OperadorFormPage(FormPage):
             self.e_usr.configure(state="disabled")
         self.e_nom = F.label_entry(self.col_left, "Nombre", r.get("nombre", ""), width=w)
         self.e_ape = F.label_entry(self.col_left, "Apellido", r.get("apellido", "") or "", width=w)
-        self.e_ced = F.label_entry(self.col_right, "Cédula", r.get("cedula", "") or "", width=w)
-        self.e_tel = F.label_entry(self.col_right, "Teléfono", r.get("telefono", "") or "", width=w)
+        self.e_ced = F.label_entry(self.col_right, "Cédula", r.get("cedula", "") or "", width=w,
+                                   digits_only=True)
+        self.e_tel = F.label_entry(self.col_right, "Teléfono", r.get("telefono", "") or "", width=w,
+                                   phone=True)
         rol_actual = ROLE_LABEL_BY_VALUE.get(r.get("rol", "operador"), "Operador")
         self.c_rol = F.label_combo(
             self.col_right, "Rol",
@@ -46,6 +48,14 @@ class OperadorFormPage(FormPage):
             return
         if " " in usr:
             self.set_error("El usuario no debe contener espacios.")
+            return
+        ced = self.e_ced.get().strip()
+        if ced and not ced.isdigit():
+            self.set_error("La cédula solo debe contener números.")
+            return
+        err = F.validate_phone(self.e_tel.get())
+        if err:
+            self.set_error(err)
             return
         if self.reg:
             self.db.update_operador(self.reg["id"], nom, self.e_ape.get().strip(),

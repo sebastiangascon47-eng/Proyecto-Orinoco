@@ -18,10 +18,12 @@ class BeneficiarioFormPage(FormPage):
         )
         r = registro or {}
         w = self.FIELD_W
-        self.e_ced = F.label_entry(self.col_left, "Cédula", r.get("cedula", ""), width=w)
+        self.e_ced = F.label_entry(self.col_left, "Cédula", r.get("cedula", ""), width=w,
+                                   digits_only=True)
         self.e_nom = F.label_entry(self.col_left, "Nombre", r.get("nombre", ""), width=w)
         self.e_ape = F.label_entry(self.col_left, "Apellido", r.get("apellido", ""), width=w)
-        self.e_tel = F.label_entry(self.col_left, "Teléfono", r.get("telefono", "") or "", width=w)
+        self.e_tel = F.label_entry(self.col_left, "Teléfono", r.get("telefono", "") or "", width=w,
+                                   phone=True)
         self.e_cor = F.label_entry(self.col_right, "Correo (opcional)", r.get("correo", "") or "", width=w)
         self.e_emb = F.label_entry(self.col_right, "Embarcación", r.get("embarcacion", "") or "", width=w)
         self.e_mot = F.label_entry(self.col_right, "Motor", r.get("motor", "") or "", width=w)
@@ -30,8 +32,16 @@ class BeneficiarioFormPage(FormPage):
         ced = self.e_ced.get().strip()
         nom = self.e_nom.get().strip()
         ape = self.e_ape.get().strip()
-        if not (ced and nom and ape):
-            self.set_error("Cédula, nombre y apellido son obligatorios.")
+        err = F.validate_cedula(ced)
+        if err:
+            self.set_error(err)
+            return
+        if not (nom and ape):
+            self.set_error("Nombre y apellido son obligatorios.")
+            return
+        err = F.validate_phone(self.e_tel.get())
+        if err:
+            self.set_error(err)
             return
         existe = self.db.get_beneficiario_by_cedula(ced)
         if existe and (not self.reg or existe["id"] != self.reg["id"]):
