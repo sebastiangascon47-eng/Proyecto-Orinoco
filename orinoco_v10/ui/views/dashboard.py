@@ -10,8 +10,7 @@ from ui.views.utils import despacho_estado
 
 class DashboardView(BaseView):
     def _build(self):
-        self.page_title("Inicio", "Operación de hoy",
-                        actions=[("Actualizar", "secondary", self._force_refresh)])
+        self.page_title("Inicio", "Operación de hoy")
         self._cards = self.page_metrics([
             ("Inventario disponible", "0 L", M[0], self._go_inventario),
             ("Despachos hoy", "0", M[1], self._go_despacho),
@@ -49,9 +48,6 @@ class DashboardView(BaseView):
             ("Estado", despacho_estado(r)), ("Operador", r["operador"]),
         ]
         modals.DetailModal(self.app, "Ver despacho", fields, [])
-
-    def _force_refresh(self):
-        self._refresh()
 
     def _refresh(self):
         s = self.db.stats()

@@ -71,6 +71,7 @@ class ReportesView(BaseView):
             ("cedula", "Cédula", 100), ("litros", "Litros", 90), ("tipo", "Tipo", 100),
             ("estado", "Estado", 100), ("monto", "Monto Bs", 100),
         ], height=HDR_H + ROW_H * _TBL_VISIBLE_ROWS, flat=True)
+        self._tbl.set_hidden_columns({"id"})
         self._tbl.pack(fill="both", expand=True)
         ctk.CTkFrame(body, fg_color="transparent", height=24).pack()
         self._rows_cache = []
@@ -123,6 +124,7 @@ class ReportesView(BaseView):
         rows = [self._row_display(r) for r in self._rows_cache]
         self._tbl.cancel_load()
         self._tbl._last_fp = None
+        self._tbl.set_hidden_columns({"id"})
         self._tbl.load(rows)
         self._load_chart(self._chart.scope)
 
