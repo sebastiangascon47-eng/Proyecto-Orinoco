@@ -23,7 +23,7 @@ class DespachoView(ListFormMixin, BaseView):
         ], page_size=ROWS_PER_PAGE, row_actions=self._row_actions)
 
     def _refresh(self):
-        rows = self.db.get_despachos(limit=2000, incluir_anulados=False)
+        rows = self.db.get_despachos(limit=2000, incluir_anulados=True)
         self._ptbl.table._last_fp = None
         self._ptbl.load([self._fmt(r) for r in rows])
 
@@ -46,7 +46,7 @@ class DespachoView(ListFormMixin, BaseView):
         if perm.can_edit_despacho(self.user) and self._editable(r):
             items.append(("Editar", lambda: modals.DespachoEditModal(
                 self.app, self.db, self.user, self._on_change, dict(r)), False))
-        if self.can_delete and r["estado"] != "anulado":
+        if self.can_delete and r["estado"] == "registrado":
             items.append(("Anular", lambda: self._anular(r), True))
         return items
 
@@ -84,7 +84,8 @@ class DespachoView(ListFormMixin, BaseView):
     def _anular(self, r):
         modals.ConfirmModal(
             self.app, "Anular despacho",
-            f"¿Anular el despacho #{r['id']}? Se devolverán {r['litros']:,.0f} L al inventario.",
+            f"¿Anular el despacho #{r['id']}? Se devolverán {r['litros']:,.0f} L al inventario. "
+            "El registro permanecerá en la lista como anulado.",
             need_reason=True, confirm_text="Anular", variant="danger",
             on_confirm=lambda motivo: self._do_anular(r, motivo))
 

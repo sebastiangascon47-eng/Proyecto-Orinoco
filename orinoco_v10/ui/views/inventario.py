@@ -46,11 +46,11 @@ class InventarioView(BaseView):
     def _row_actions(self, row, _idx):
         r = row["_raw"]
         items = [("Ver", lambda: self._ver(r), False)]
-        if perm.can_restock(self.user):
-            items.append(("Reabastecer", lambda: modals.ReabastecerModal(
-                self.app, self.db, self.user, self._refresh, dict(r)), False))
         if perm.can_adjust_inventory(self.user):
-            items.append(("Ajustar", lambda: modals.AjusteModal(
+            items.append(("Corregir inventario", lambda: modals.AjusteModal(
+                self.app, self.db, self.user, self._refresh, dict(r)), False))
+        elif perm.can_restock(self.user):
+            items.append(("Reabastecer", lambda: modals.ReabastecerModal(
                 self.app, self.db, self.user, self._refresh, dict(r)), False))
         if perm.can_manage_fuel_types(self.user):
             items.append(("Editar", lambda: modals.TipoCombustibleModal(

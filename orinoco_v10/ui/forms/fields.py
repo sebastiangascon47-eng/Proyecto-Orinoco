@@ -10,8 +10,24 @@ def lbl(parent, text):
                  text_color=C["text3"]).pack(anchor="w", pady=(12, 3))
 
 
-def entry(parent, value="", show="", ph="", width=410, height=40):
+def _numeric_ok(proposed: str, decimal: bool = True) -> bool:
+    if proposed == "":
+        return True
+    allowed = "0123456789"
+    if decimal:
+        allowed += ".,"
+    if any(ch not in allowed for ch in proposed):
+        return False
+    sep = proposed.replace(",", ".").count(".")
+    return sep <= 1
+
+
+def entry(parent, value="", show="", ph="", width=410, height=40,
+          numeric=False, decimal=True):
     e = field(parent, width=width, height=height, show=show, placeholder=ph)
+    if numeric:
+        reg = parent.register(lambda p: _numeric_ok(p, decimal))
+        e.configure(validate="key", validatecommand=(reg, "%P"))
     if value not in ("", None):
         e.insert(0, str(value))
     e.pack(fill="x")
@@ -28,9 +44,11 @@ def combo(parent, values, value=None, state="normal", width=410):
     return d
 
 
-def label_entry(parent, label, value="", show="", width=410, ph=""):
+def label_entry(parent, label, value="", show="", width=410, ph="",
+                numeric=False, decimal=True):
     lbl(parent, label)
-    return entry(parent, value=value, show=show, width=width, ph=ph)
+    return entry(parent, value=value, show=show, width=width, ph=ph,
+                 numeric=numeric, decimal=decimal)
 
 
 def label_combo(parent, label, values, value=None, state="normal", width=410):

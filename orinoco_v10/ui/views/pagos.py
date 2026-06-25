@@ -1,7 +1,8 @@
 """Vista: Pagos — cobros pendientes y registrados."""
 from __future__ import annotations
+import customtkinter as ctk
 from core import permissions as perm
-from core.theme import M, ROWS_PER_PAGE_COMPACT
+from core.theme import C, FONT_H1, M, PAD, ROWS_PER_PAGE_COMPACT
 from ui import modals
 from ui.views.base import BaseView
 from ui.views.utils import pago_estado
@@ -9,8 +10,24 @@ from ui.views.utils import pago_estado
 
 class PagosView(BaseView):
     def _build(self):
-        self.page_title("Control de pagos")
-        body = self.page_scroll()
+        self._page.grid_columnconfigure(0, weight=1)
+        self._page.grid_rowconfigure(1, weight=1)
+
+        top = ctk.CTkFrame(self._page, fg_color="transparent")
+        top.grid(row=0, column=0, sticky="ew", padx=PAD, pady=(PAD, 6))
+        ctk.CTkLabel(top, text="Control de pagos", font=FONT_H1,
+                     text_color=C["text"]).pack(anchor="w")
+        bar = self.page_toolbar(parent=top)
+        self.toolbar_btn(bar.right, "Registrar pago", command=self._registrar_pago,
+                         width=168).pack(side="right")
+
+        body = ctk.CTkScrollableFrame(
+            self._page, fg_color="transparent",
+            scrollbar_button_color=C["elevated"],
+            scrollbar_button_hover_color=C["border"],
+        )
+        body.grid(row=1, column=0, sticky="nsew")
+
         self._cards = self.page_metrics([
             ("Monto por cobrar", "0 Bs", M[0]),
             ("Cobrado hoy", "0 Bs", M[2]),
@@ -29,10 +46,24 @@ class PagosView(BaseView):
             ("monto", "Monto Bs", 110), ("referencia", "Referencia", 130),
             ("metodo", "Método", 110), ("estado", "Estado", 100),
         ], page_size=ROWS_PER_PAGE_COMPACT, row_actions=self._done_actions, expand=False)
+        ctk.CTkFrame(body, fg_color="transparent", height=24).pack()
 
     @staticmethod
     def _despacho_editable(r) -> bool:
         return r["estado"] == "registrado" and not r["pagado"]
+
+    def _registrar_pago(self):
+        pend = [dict(r) for r in self.db.get_despachos_pendientes()]
+        if not pend:
+            self.app.toast("No hay despachos pendientes de pago", "warning")
+            return
+        if len(pend) == 1:
+            self._abrir_pago(pend[0])
+            return
+        modals.SeleccionDespachoPagoModal(self.app, pend, self._abrir_pago)
+
+    def _abrir_pago(self, despacho: dict):
+        modals.PagoModal(self.app, self.db, self.user, self._on_change, despacho)
 
     def _refresh(self):
         sc = self.db.stats_cobros()
@@ -50,12 +81,11 @@ class PagosView(BaseView):
             "monto": f"{p['monto_bs']:,.2f}", "referencia": p["referencia"] or "—",
             "metodo": p["metodo"],
             "estado": pago_estado(p), "_raw": p,
-        } for p in self.db.get_pagos(limit=500, incluir_anulados=False)])
+        } for p in self.db.get_pagos(limit=500, incluir_anulados=True)])
 
     def _pend_actions(self, row, _idx):
         r = row["_raw"]
-        items = [("Registrar pago", lambda: modals.PagoModal(
-            self.app, self.db, self.user, self._on_change, dict(r)), False)]
+        items = [("Registrar pago", lambda: self._abrir_pago(dict(r)), False)]
         if perm.can_edit_despacho(self.user) and self._despacho_editable(r):
             items.append(("Editar", lambda: modals.DespachoEditModal(
                 self.app, self.db, self.user, self._on_change, dict(r)), False))
@@ -92,7 +122,8 @@ class PagosView(BaseView):
     def _anular_despacho(self, r):
         modals.ConfirmModal(
             self.app, "Anular despacho",
-            f"¿Anular el despacho #{r['id']}? Se devolverán {r['litros']:,.0f} L al inventario.",
+            f"¿Anular el despacho #{r['id']}? Se devolverán {r['litros']:,.0f} L al inventario. "
+            "El registro quedará marcado como anulado.",
             need_reason=True, confirm_text="Anular", variant="danger",
             on_confirm=lambda motivo: self._do_anular_despacho(r, motivo))
 

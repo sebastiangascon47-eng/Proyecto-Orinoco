@@ -31,9 +31,10 @@ class DespachoFormPage(FormPage):
         self._ben_map: dict[str, int] = {}
         self._inv_map: dict[str, tuple] = {}
 
-        for w in (self._col0, self._col1, self._full):
+        for w in (self._col0, self._col1):
             w.pack_forget()
         self._col0.master.pack_forget()
+        self._full.pack(fill="both", expand=True)
 
         self._step_bar = ctk.CTkFrame(self.full_width, fg_color="transparent")
         self._step_bar.pack(fill="x", pady=(0, 12))
@@ -124,7 +125,7 @@ class DespachoFormPage(FormPage):
             return True
         if self._step == 1:
             try:
-                litros = float(self.e_lit.get())
+                litros = float(self.e_lit.get().replace(",", "."))
                 assert litros > 0
             except Exception:
                 self.set_error("Ingrese litros válidos (> 0).")
@@ -134,7 +135,7 @@ class DespachoFormPage(FormPage):
                 self.set_error(f"Inventario insuficiente. Disponible: {disp:,.0f} L.")
                 return False
             try:
-                monto = float(self.e_mon.get() or 0)
+                monto = float(self.e_mon.get().replace(",", ".") or 0)
                 assert monto > 0
             except Exception:
                 self.set_error("Ingrese un monto válido.")
@@ -204,9 +205,9 @@ class DespachoFormPage(FormPage):
         self.c_inv = F.label_combo(left, "Tipo de combustible",
                                    list(self._inv_map.keys()), width=self.FIELD_W)
         self.c_inv.configure(command=self._on_combustible_change)
-        self.e_lit = F.label_entry(left, "Litros a despachar", width=self.FIELD_W)
+        self.e_lit = F.label_entry(left, "Litros a despachar", width=self.FIELD_W, numeric=True)
         self.e_lit.bind("<KeyRelease>", lambda _: self._recalc_monto())
-        self.e_mon = F.label_entry(right, f"Monto ({self._moneda})", width=self.FIELD_W)
+        self.e_mon = F.label_entry(right, f"Monto ({self._moneda})", width=self.FIELD_W, numeric=True)
         self.e_obs = F.label_entry(right, "Observaciones (opcional)", width=self.FIELD_W)
         self._stock_lbl = ctk.CTkLabel(right, text="", font=FONT_SM, text_color=C["text3"])
         self._stock_lbl.pack(anchor="w", pady=(8, 0))

@@ -26,8 +26,10 @@ def _combo(parent, values, value=None, state="normal", width=MW):
     return F.combo(parent, values, value=value, state=state, width=width)
 
 
-def _label_entry(parent, label, value="", show="", width=MW, ph=""):
-    return F.label_entry(parent, label, value=value, show=show, width=width, ph=ph)
+def _label_entry(parent, label, value="", show="", width=MW, ph="",
+                 numeric=False, decimal=True):
+    return F.label_entry(parent, label, value=value, show=show, width=width, ph=ph,
+                         numeric=numeric, decimal=decimal)
 
 
 def _label_combo(parent, label, values, value=None, state="normal", width=MW):
@@ -149,9 +151,9 @@ class TipoCombustibleModal(Modal):
             if len(opciones) == 1:
                 self._on_tipo_sel()
         self.e_cap = _label_entry(self.body, "Capacidad (litros)",
-                                  r.get("capacidad", 20000))
+                                  r.get("capacidad", 20000), numeric=True)
         self.e_min = _label_entry(self.body, "Mínimo de alerta (litros)",
-                                  r.get("minimo_alerta", 2000))
+                                  r.get("minimo_alerta", 2000), numeric=True)
         self.add_buttons("Guardar" if edit else "Registrar", self._save, variant="primary")
 
     def _on_tipo_sel(self, _choice=None):
@@ -181,8 +183,8 @@ class TipoCombustibleModal(Modal):
             self.set_error("El tipo es obligatorio.")
             return
         try:
-            cap = float(self.e_cap.get() or 0)
-            mn = float(self.e_min.get() or 0)
+            cap = float(str(self.e_cap.get()).replace(",", "."))
+            mn = float(str(self.e_min.get()).replace(",", "."))
         except ValueError:
             self.set_error("Capacidad y mínimo deben ser numéricos.")
             return
@@ -214,16 +216,16 @@ class DespachoEditModal(Modal):
             text=f"{despacho['beneficiario']} · {despacho['tipo']}",
             font=FONT_BODY, text_color=C["text"],
         ).pack(anchor="w", pady=(8, 4))
-        self.e_lit = _label_entry(self.body, "Litros", value=despacho["litros"])
-        self.e_mon = _label_entry(self.body, "Monto Bs", value=despacho["monto_bs"])
+        self.e_lit = _label_entry(self.body, "Litros", value=despacho["litros"], numeric=True)
+        self.e_mon = _label_entry(self.body, "Monto Bs", value=despacho["monto_bs"], numeric=True)
         self.e_obs = _label_entry(
             self.body, "Observaciones", value=despacho["observaciones"] or "")
         self.add_buttons("Guardar cambios", self._save, variant="primary")
 
     def _save(self):
         try:
-            litros = float(self.e_lit.get())
-            monto = float(self.e_mon.get())
+            litros = float(self.e_lit.get().replace(",", "."))
+            monto = float(self.e_mon.get().replace(",", "."))
             assert litros > 0 and monto >= 0
         except Exception:
             self.set_error("Litros y monto deben ser valores numéricos válidos.")
@@ -250,16 +252,21 @@ class ReabastecerModal(Modal):
         ctk.CTkLabel(self.body,
                      text=f"{inv['tipo']} · actual: {inv['litros_actual']:,.0f} L",
                      font=FONT_BODY, text_color=C["text"]).pack(anchor="w", pady=(8, 2))
-        self.e = _label_entry(self.body, "Litros a agregar")
+        ctk.CTkLabel(
+            self.body,
+            text="Registro de entrada por compra o recepción de combustible.",
+            font=FONT_SM, text_color=C["text3"], wraplength=MW, justify="left",
+        ).pack(anchor="w", pady=(0, 6))
+        self.e = _label_entry(self.body, "Litros a agregar", numeric=True)
         self.c_mot = _label_combo(self.body, "Motivo", list(MOTIVOS_REABASTECIMIENTO))
         self.add_buttons("Reabastecer", self._save, variant="primary")
 
     def _save(self):
         try:
-            litros = float(self.e.get())
+            litros = float(self.e.get().replace(",", "."))
             assert litros > 0
         except Exception:
-            self.set_error("Ingrese una cantidad válida mayor a cero.")
+            self.set_error("Ingrese una cantidad numérica mayor a cero.")
             return
         self.db.reabastecer(self.inv["id"], litros, self.user["nombre"],
                             self.c_mot.get())
@@ -271,32 +278,70 @@ class ReabastecerModal(Modal):
 class AjusteModal(Modal):
     def __init__(self, app, db, user, on_done, inv):
         self.app, self.db, self.user, self.on_done, self.inv = app, db, user, on_done, inv
-        super().__init__(app, "Ajustar inventario", width=480, height=460)
+        super().__init__(app, "Corregir inventario", width=480, height=500)
         ctk.CTkLabel(self.body,
                      text=f"{inv['tipo']} · actual: {inv['litros_actual']:,.0f} L",
                      font=FONT_BODY, text_color=C["text"]).pack(anchor="w", pady=(8, 2))
+        ctk.CTkLabel(
+            self.body,
+            text="Ajuste por merma, pérdida o corrección de conteo físico "
+                 "(no sustituye un reabastecimiento).",
+            font=FONT_SM, text_color=C["text3"], wraplength=MW, justify="left",
+        ).pack(anchor="w", pady=(0, 6))
         _lbl(self.body, "Operación")
-        self.c_op = _combo(self.body, ["Agregar", "Restar"])
-        self.e = _label_entry(self.body, "Litros")
+        self.c_op = _combo(self.body, ["Restar (merma / pérdida)", "Sumar (corrección)"])
+        self.e = _label_entry(self.body, "Litros", numeric=True)
         self.c_mot = _label_combo(self.body, "Motivo", list(MOTIVOS_AJUSTE))
-        self.add_buttons("Aplicar ajuste", self._save, variant="primary")
+        self.add_buttons("Aplicar corrección", self._save, variant="primary")
 
     def _save(self):
         try:
-            litros = float(self.e.get())
+            litros = float(self.e.get().replace(",", "."))
             assert litros > 0
         except Exception:
-            self.set_error("Ingrese una cantidad válida mayor a cero.")
+            self.set_error("Ingrese una cantidad numérica mayor a cero.")
             return
-        op = "add" if self.c_op.get() == "Agregar" else "sub"
+        op = "add" if self.c_op.get().startswith("Sumar") else "sub"
+        if op == "sub" and litros > self.inv["litros_actual"]:
+            self.set_error(
+                f"No puede restar más de lo disponible ({self.inv['litros_actual']:,.0f} L).")
+            return
         self.db.ajustar(self.inv["id"], litros, op, self.user["nombre"],
                         self.c_mot.get())
         self.db.log(self.user["id"], self.user["nombre"], "Inventario",
-                    "Ajustar", f"{self.inv['tipo']} {self.c_op.get()} {litros:,.0f} L")
-        self.destroy(); self.on_done(); self.app.toast("Ajuste aplicado")
+                    "Corregir", f"{self.inv['tipo']} {self.c_op.get()} {litros:,.0f} L")
+        self.destroy(); self.on_done(); self.app.toast("Inventario corregido")
 
 
 # ════════════════════ PAGO (modal corto) ════════════════════════
+class SeleccionDespachoPagoModal(Modal):
+    """Elige un despacho pendiente antes de abrir el formulario de pago."""
+
+    def __init__(self, app, despachos: list, on_pick):
+        self.app, self._on_pick = app, on_pick
+        self._map = {
+            f"#{d['id']} · {d['beneficiario']} · {d['litros']:,.0f} L · "
+            f"{d['monto_bs']:,.2f} Bs": d
+            for d in despachos
+        }
+        super().__init__(app, "Seleccionar despacho", width=520, height=340)
+        ctk.CTkLabel(
+            self.body,
+            text="Elija el despacho pendiente de pago que desea cobrar.",
+            font=FONT_BODY, text_color=C["text"], wraplength=MW, justify="left",
+        ).pack(anchor="w", pady=(8, 4))
+        self.c_desp = _label_combo(self.body, "Despacho pendiente", list(self._map.keys()))
+        self.add_buttons("Continuar", self._ok, variant="primary")
+
+    def _ok(self):
+        d = self._map.get(self.c_desp.get())
+        if not d:
+            self.set_error("Seleccione un despacho.")
+            return
+        self.destroy()
+        self._on_pick(dict(d))
+
+
 class PagoModal(Modal):
     def __init__(self, app, db, user, on_done, despacho):
         self.app, self.db, self.user, self.on_done, self.d = app, db, user, on_done, despacho
@@ -308,7 +353,7 @@ class PagoModal(Modal):
         ctk.CTkLabel(self.body, text=f"{despacho['litros']:,.0f} L · {despacho['tipo']}",
                      font=FONT_SM, text_color=C["text3"]).pack(anchor="w", pady=(0, 8))
         self.e_mon = _label_entry(self.body, "Monto a cobrar (Bs)",
-                                  f"{despacho['monto_bs']:.2f}")
+                                  f"{despacho['monto_bs']:.2f}", numeric=True)
         self.c_met = _label_combo(self.body, "Método de pago", list(self._metodos.keys()))
         self.c_met.configure(command=self._on_metodo)
         self.e_ref = _label_entry(self.body, "Referencia")
@@ -324,7 +369,7 @@ class PagoModal(Modal):
     def _save(self):
         from core.business import METODOS_SIN_REFERENCIA
         try:
-            monto = float(self.e_mon.get())
+            monto = float(self.e_mon.get().replace(",", "."))
             assert monto > 0
         except Exception:
             self.set_error("Monto inválido.")
