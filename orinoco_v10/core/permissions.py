@@ -60,3 +60,8 @@ def can_manage_fuel_types(user: dict) -> bool:
 def can_restock(user: dict) -> bool:
     """Reabastecer inventario — operación diaria permitida al operador."""
     return True
+
+
+def can_edit_despacho(user: dict) -> bool:
+    """Editar despachos pendientes de pago (antes de cobrar)."""
+    return True

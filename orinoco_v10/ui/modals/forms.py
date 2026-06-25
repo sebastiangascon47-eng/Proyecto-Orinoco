@@ -130,18 +130,16 @@ class TipoCombustibleModal(Modal):
         edit = registro is not None
         super().__init__(app, "Editar tipo de combustible" if edit else "Nuevo tipo de combustible",
                          width=480, height=520)
-        r = registro or {}
+        r = dict(registro) if registro else {}
         self.e_tipo_otro = None
         self._otro_box = ctk.CTkFrame(self.body, fg_color="transparent")
         if edit:
-            self.c_tipo = _label_combo(
-                self.body, "Tipo de combustible",
-                [r.get("tipo", "")],
-                value=r.get("tipo", ""),
-                state="disabled",
-            )
-            self._tipo_fijo = r.get("tipo", "")
+            self.e_tipo = _label_entry(
+                self.body, "Tipo de combustible", value=r.get("tipo", ""))
+            self.c_tipo = None
+            self._tipo_fijo = None
         else:
+            self.e_tipo = None
             existentes = {i["tipo"] for i in db.get_inventario(solo_activos=False)}
             opciones = [t for t in TIPOS_COMBUSTIBLE if t not in existentes]
             opciones.append(TIPO_COMBUSTIBLE_OTRO)
@@ -162,19 +160,23 @@ class TipoCombustibleModal(Modal):
             return
         if self.e_tipo_otro is None:
             _lbl(self._otro_box, "Nombre personalizado")
-            self.e_tipo_otro = _entry(self._otro_box, ph="Ej: Gasolina 97, Diesel marino…")
+            self.e_tipo_otro = _label_entry(self._otro_box, "Nombre del combustible")
         self._otro_box.pack(fill="x", pady=(0, 4))
 
     def _save(self):
-        if self._tipo_fijo:
+        if self.reg and self.e_tipo is not None:
+            tipo = self.e_tipo.get().strip()
+        elif self._tipo_fijo:
             tipo = self._tipo_fijo
-        elif self.c_tipo.get() == TIPO_COMBUSTIBLE_OTRO:
+        elif self.c_tipo and self.c_tipo.get() == TIPO_COMBUSTIBLE_OTRO:
             tipo = (self.e_tipo_otro.get().strip() if self.e_tipo_otro else "")
             if not tipo:
                 self.set_error("Indique el nombre del nuevo tipo de combustible.")
                 return
-        else:
+        elif self.c_tipo:
             tipo = self.c_tipo.get().strip()
+        else:
+            tipo = ""
         if not tipo:
             self.set_error("El tipo es obligatorio.")
             return
@@ -199,6 +201,46 @@ class TipoCombustibleModal(Modal):
                         "Registrar tipo", tipo)
             msg = "Tipo de combustible registrado"
         self.destroy(); self.on_done(); self.app.toast(msg)
+
+
+class DespachoEditModal(Modal):
+    """Editar despacho pendiente de pago (litros, monto, observaciones)."""
+
+    def __init__(self, app, db, user, on_done, despacho: dict):
+        self.app, self.db, self.user, self.on_done, self.d = app, db, user, on_done, despacho
+        super().__init__(app, f"Editar despacho #{despacho['id']}", width=480, height=460)
+        ctk.CTkLabel(
+            self.body,
+            text=f"{despacho['beneficiario']} · {despacho['tipo']}",
+            font=FONT_BODY, text_color=C["text"],
+        ).pack(anchor="w", pady=(8, 4))
+        self.e_lit = _label_entry(self.body, "Litros", value=despacho["litros"])
+        self.e_mon = _label_entry(self.body, "Monto Bs", value=despacho["monto_bs"])
+        self.e_obs = _label_entry(
+            self.body, "Observaciones", value=despacho["observaciones"] or "")
+        self.add_buttons("Guardar cambios", self._save, variant="primary")
+
+    def _save(self):
+        try:
+            litros = float(self.e_lit.get())
+            monto = float(self.e_mon.get())
+            assert litros > 0 and monto >= 0
+        except Exception:
+            self.set_error("Litros y monto deben ser valores numéricos válidos.")
+            return
+        try:
+            self.db.update_despacho_pendiente(
+                self.d["id"], litros, monto, self.e_obs.get().strip(),
+                self.user["nombre"],
+            )
+        except ValueError as e:
+            self.set_error(str(e))
+            return
+        self.db.log(self.user["id"], self.user["nombre"], "Despachos",
+                    "Editar", f"#{self.d['id']} · {litros:,.0f} L")
+        self.destroy()
+        self.on_done()
+        self.app.toast("Despacho actualizado")
 
 
 class ReabastecerModal(Modal):

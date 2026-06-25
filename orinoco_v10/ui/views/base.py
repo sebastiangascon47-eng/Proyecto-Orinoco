@@ -178,10 +178,21 @@ class BaseView(ctk.CTkFrame):
         body.pack(fill="both", expand=True)
         return body
 
-    def section_title(self, text: str):
+    def section_title(self, text: str, parent=None):
         """Título de sección dentro de la página (.sectionTitle)."""
-        ctk.CTkLabel(self._page, text=text, font=FONT_H3,
+        root = parent or self._page
+        ctk.CTkLabel(root, text=text, font=FONT_H3,
                      text_color=C["text"]).pack(anchor="w", padx=PAD, pady=(12, 6))
+
+    def page_scroll(self) -> ctk.CTkScrollableFrame:
+        """Cuerpo desplazable para páginas con varias secciones."""
+        scroll = ctk.CTkScrollableFrame(
+            self._page, fg_color="transparent",
+            scrollbar_button_color=C["elevated"],
+            scrollbar_button_hover_color=C["border"],
+        )
+        scroll.pack(fill="both", expand=True)
+        return scroll
 
     def _header(self, title, subtitle="", actions=None):
         return self.page_title(title, subtitle, actions)
@@ -220,6 +231,8 @@ class ListFormMixin:
         ).pack(fill="both", expand=True)
         self._list_host.pack_forget()
         self._form_host.pack(fill="both", expand=True)
+        self._form_host.lift()
+        self.update_idletasks()
 
     def _close_form(self):
         for w in self._form_host.winfo_children():

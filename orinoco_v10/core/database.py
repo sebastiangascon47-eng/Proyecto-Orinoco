@@ -943,6 +943,47 @@ class DB:
                          WHERE despacho_id=? AND estado='registrado'""", (_now(), id_))
             return True
 
+    def update_despacho_pendiente(self, id_: int, litros: float, monto_bs: float,
+                                  observaciones: str, operador: str = "Sistema") -> bool:
+        """Ajusta litros/monto de un despacho no pagado y actualiza inventario."""
+        with self.con() as c:
+            d = c.execute(
+                "SELECT * FROM despachos WHERE id=? AND estado='registrado' AND pagado=0",
+                (id_,),
+            ).fetchone()
+            if not d:
+                raise ValueError("Solo se pueden editar despachos pendientes de pago.")
+            if not d["inventario_id"]:
+                raise ValueError("El despacho no tiene inventario asociado.")
+            diff = litros - float(d["litros"])
+            if diff != 0:
+                inv = c.execute(
+                    "SELECT litros_actual FROM inventario WHERE id=?",
+                    (d["inventario_id"],),
+                ).fetchone()
+                if inv["litros_actual"] < diff:
+                    falta = diff - inv["litros_actual"]
+                    raise ValueError(f"Stock insuficiente: faltan {falta:,.0f} L")
+                c.execute(
+                    "UPDATE inventario SET litros_actual = litros_actual - ?, actualizado_en=? "
+                    "WHERE id=?",
+                    (diff, _now(), d["inventario_id"]),
+                )
+                mov = "salida" if diff > 0 else "entrada"
+                c.execute(
+                    """INSERT INTO movimientos_inventario
+                       (inventario_id, tipo_movimiento, litros, referencia_despacho_id,
+                        motivo, operador)
+                       VALUES (?, ?, ?, ?, 'Ajuste por edición de despacho', ?)""",
+                    (d["inventario_id"], mov, abs(diff), id_, operador),
+                )
+            c.execute(
+                """UPDATE despachos SET litros=?, monto_bs=?, observaciones=?,
+                   actualizado_en=? WHERE id=?""",
+                (litros, monto_bs, observaciones or None, _now(), id_),
+            )
+            return True
+
     def stats_despachos(self, desde: str | None = None, hasta: str | None = None) -> dict:
         params, cond = [], "WHERE estado='registrado'"
         if desde:

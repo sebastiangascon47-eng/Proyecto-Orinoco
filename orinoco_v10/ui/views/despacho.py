@@ -1,5 +1,6 @@
 """Vista: Despachos."""
 from __future__ import annotations
+from core import permissions as perm
 from core.theme import ROWS_PER_PAGE
 from ui import forms
 from ui import modals
@@ -22,7 +23,8 @@ class DespachoView(ListFormMixin, BaseView):
         ], page_size=ROWS_PER_PAGE, row_actions=self._row_actions)
 
     def _refresh(self):
-        rows = self.db.get_despachos(limit=2000)
+        rows = self.db.get_despachos(limit=2000, incluir_anulados=False)
+        self._ptbl.table._last_fp = None
         self._ptbl.load([self._fmt(r) for r in rows])
 
     @staticmethod
@@ -34,12 +36,25 @@ class DespachoView(ListFormMixin, BaseView):
             "estado": despacho_estado(r), "_raw": r,
         }
 
+    @staticmethod
+    def _editable(r) -> bool:
+        return r["estado"] == "registrado" and not r["pagado"]
+
     def _row_actions(self, row, _idx):
         r = row["_raw"]
         items = [("Ver", lambda: self._ver(r), False)]
+        if perm.can_edit_despacho(self.user) and self._editable(r):
+            items.append(("Editar", lambda: modals.DespachoEditModal(
+                self.app, self.db, self.user, self._on_change, dict(r)), False))
         if self.can_delete and r["estado"] != "anulado":
             items.append(("Anular", lambda: self._anular(r), True))
         return items
+
+    def _on_change(self):
+        self.mark_stale()
+        self._refresh()
+        if self.app and hasattr(self.app, "notify_data_changed"):
+            self.app.notify_data_changed()
 
     def _nuevo(self):
         self._open_form(forms.DespachoFormPage, on_new_beneficiario=self._nuevo_beneficiario)
@@ -74,8 +89,10 @@ class DespachoView(ListFormMixin, BaseView):
             on_confirm=lambda motivo: self._do_anular(r, motivo))
 
     def _do_anular(self, r, motivo):
-        self.db.anular_despacho(r["id"], motivo, self.user["nombre"])
+        if not self.db.anular_despacho(r["id"], motivo, self.user["nombre"]):
+            self.app.toast("No se pudo anular el despacho", "error")
+            return
         self.db.log(self.user["id"], self.user["nombre"], "Despachos",
                     "Anular", f"#{r['id']} — {motivo}")
-        self._refresh()
+        self._on_change()
         self.app.toast("Despacho anulado")

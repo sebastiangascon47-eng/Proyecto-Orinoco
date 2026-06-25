@@ -188,8 +188,8 @@ class DespachoFormPage(FormPage):
         self._ben_lbl.configure(
             text=f"{ben['nombre']} {ben['apellido']}\n"
                  f"Cédula: {ben['cedula']}\n"
-                 f"Embarcación: {ben.get('embarcacion') or '—'}\n"
-                 f"Motor: {ben.get('motor') or '—'}",
+                 f"Embarcación: {ben['embarcacion'] or '—'}\n"
+                 f"Motor: {ben['motor'] or '—'}",
             text_color=C["text"],
         )
 
