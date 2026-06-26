@@ -28,7 +28,7 @@ class DespachoView(ListFormMixin, BaseView):
                          width=168).pack(side="right")
         panel = self.page_list_panel(parent=self._list_host)
         self._ptbl = self.page_paginated_table(panel, [
-            ("id", "#", 40), ("fecha", "Fecha", 120), ("cedula", "Cédula", 100),
+            ("fecha", "Fecha", 120), ("cedula", "Cédula", 100),
             ("beneficiario", "Beneficiario", 160), ("litros", "Litros", 90),
             ("tipo", "Tipo", 100), ("monto", "Monto Bs", 100), ("estado", "Estado", 110),
         ], page_size=ROWS_PER_PAGE, row_actions=self._row_actions)
@@ -49,8 +49,6 @@ class DespachoView(ListFormMixin, BaseView):
         return rows
 
     def _refresh(self):
-        f = self._fil.get() if hasattr(self, "_fil") else _FILTROS[0]
-        self._ptbl.set_hidden_columns({"id"} if f == "Pendientes de pago" else set())
         rows = self._filtered_rows()
         self._ptbl.table._last_fp = None
         self._ptbl.load([self._fmt(r) for r in rows])
@@ -59,7 +57,7 @@ class DespachoView(ListFormMixin, BaseView):
     def _fmt(r):
         rd = dict(r)
         return {
-            "id": rd["id"], "fecha": rd["fecha"][:16], "cedula": rd["cedula"],
+            "fecha": rd["fecha"][:16], "cedula": rd["cedula"],
             "beneficiario": rd["beneficiario"], "litros": f"{rd['litros']:,.0f} L",
             "tipo": rd["tipo"], "monto": f"{rd['monto_bs']:,.2f}",
             "estado": despacho_estado(rd), "_raw": rd,
