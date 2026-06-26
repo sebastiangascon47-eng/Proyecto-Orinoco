@@ -105,7 +105,7 @@ class DespachoView(ListFormMixin, BaseView):
     def _ver(self, r):
         estado = despacho_estado(r)
         fields = [
-            ("Despacho", f"#{r['id']}"), ("Fecha", r["fecha"][:16]),
+            ("Fecha", r["fecha"][:16]),
             ("Beneficiario", f"{r['beneficiario']} ({r['cedula']})"),
             ("Combustible", r["tipo"]), ("Litros", f"{r['litros']:,.0f} L"),
             ("Monto", f"{r['monto_bs']:,.2f} Bs"), ("Estado", estado),

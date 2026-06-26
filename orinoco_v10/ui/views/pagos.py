@@ -35,7 +35,7 @@ class PagosView(BaseView):
         self.section_title("Despachos pendientes de pago", parent=body)
         pend = self.page_list_panel(expand=False, parent=body)
         self._pend = self.page_paginated_table(pend, [
-            ("id", "#", 40), ("fecha", "Fecha", 120), ("cedula", "Cédula", 100),
+            ("fecha", "Fecha", 120), ("cedula", "Cédula", 100),
             ("beneficiario", "Beneficiario", 180), ("litros", "Litros", 90),
             ("monto", "Monto Bs", 110),
         ], page_size=ROWS_PER_PAGE_COMPACT, row_actions=self._pend_actions, expand=False)
@@ -46,7 +46,6 @@ class PagosView(BaseView):
             ("monto", "Monto Bs", 110), ("referencia", "Referencia", 130),
             ("metodo", "Método", 110), ("estado", "Estado", 100),
         ], page_size=ROWS_PER_PAGE_COMPACT, row_actions=self._done_actions, expand=False)
-        self._pend.set_hidden_columns({"id"})
         ctk.CTkFrame(body, fg_color="transparent", height=24).pack()
 
     @staticmethod
@@ -71,9 +70,8 @@ class PagosView(BaseView):
         self._cards.update("Monto por cobrar", f"{sc['monto_pendiente']:,.2f} Bs")
         self._cards.update("Cobrado hoy", f"{sc['cobrado_hoy']:,.2f} Bs")
         self._pend.table._last_fp = None
-        self._pend.set_hidden_columns({"id"})
         self._pend.load([{
-            "id": r["id"], "fecha": r["fecha"][:16], "cedula": r["cedula"],
+            "fecha": r["fecha"][:16], "cedula": r["cedula"],
             "beneficiario": r["beneficiario"], "litros": f"{r['litros']:,.0f} L",
             "monto": f"{r['monto_bs']:,.2f}", "_raw": r,
         } for r in self.db.get_despachos_pendientes()])
@@ -89,8 +87,9 @@ class PagosView(BaseView):
         r = row["_raw"]
         items: list = []
         if perm.can_edit_despacho(self.user) and self._despacho_editable(r):
-            items.append(("Editar", lambda: modals.DespachoEditModal(
-                self.app, self.db, self.user, self._on_change, dict(r)), False))
+            items.append(("Editar pago", lambda: modals.DespachoEditModal(
+                self.app, self.db, self.user, self._on_change, dict(r),
+                desde_pagos=True), False))
         if self.can_delete:
             items.append(("Anular despacho", lambda: self._anular_despacho(r), True))
         return items
@@ -111,11 +110,11 @@ class PagosView(BaseView):
     def _ver(self, p):
         estado = pago_estado(p)
         fields = [
-            ("Pago", f"#{p['id']}"), ("Despacho", f"#{p['despacho_id']}"),
+            ("Fecha", p["fecha"][:16]),
             ("Beneficiario", f"{p['beneficiario']} ({p['cedula']})"),
             ("Monto", f"{p['monto_bs']:,.2f} Bs"), ("Referencia", p["referencia"] or "—"),
             ("Método", p["metodo"]), ("Estado", estado),
-            ("Fecha", p["fecha"][:16]), ("Operador", p["operador"]),
+            ("Operador", p["operador"]),
         ]
         if p["estado"] == "anulado":
             fields.append(("Motivo de anulación", p["motivo_anulacion"] or "—"))

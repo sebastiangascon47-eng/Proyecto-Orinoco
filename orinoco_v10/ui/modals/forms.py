@@ -210,9 +210,11 @@ class TipoCombustibleModal(Modal):
 class DespachoEditModal(Modal):
     """Editar despacho pendiente de pago (litros, monto, observaciones)."""
 
-    def __init__(self, app, db, user, on_done, despacho: dict):
+    def __init__(self, app, db, user, on_done, despacho: dict, *, desde_pagos: bool = False):
         self.app, self.db, self.user, self.on_done, self.d = app, db, user, on_done, despacho
-        super().__init__(app, f"Editar despacho #{despacho['id']}", width=480, height=460)
+        self._desde_pagos = desde_pagos
+        titulo = "Editar pago" if desde_pagos else "Editar despacho"
+        super().__init__(app, titulo, width=480, height=460)
         ctk.CTkLabel(
             self.body,
             text=f"{despacho['beneficiario']} · {despacho['tipo']}",
@@ -240,11 +242,13 @@ class DespachoEditModal(Modal):
         except ValueError as e:
             self.set_error(str(e))
             return
-        self.db.log(self.user["id"], self.user["nombre"], "Despachos",
-                    "Editar", f"#{self.d['id']} · {litros:,.0f} L")
+        modulo = "Pagos" if self._desde_pagos else "Despachos"
+        self.db.log(self.user["id"], self.user["nombre"], modulo,
+                    "Editar pago" if self._desde_pagos else "Editar",
+                    f"{self.d['beneficiario']} · {litros:,.0f} L")
         self.destroy()
         self.on_done()
-        self.app.toast("Despacho actualizado")
+        self.app.toast("Pago actualizado" if self._desde_pagos else "Despacho actualizado")
 
 
 class ReabastecerModal(Modal):
@@ -325,8 +329,8 @@ class SeleccionDespachoModal(Modal):
                  btn_text="Continuar"):
         self.app, self._on_pick = app, on_pick
         self._map = {
-            f"#{d['id']} · {d['beneficiario']} · {d['litros']:,.0f} L · "
-            f"{d['monto_bs']:,.2f} Bs": d
+            f"{d['beneficiario']} · {d['litros']:,.0f} L · "
+            f"{d['monto_bs']:,.2f} Bs · {d['tipo']}": d
             for d in despachos
         }
         super().__init__(app, title, width=520, height=340)

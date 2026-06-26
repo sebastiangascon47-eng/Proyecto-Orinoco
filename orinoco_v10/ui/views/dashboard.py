@@ -42,7 +42,7 @@ class DashboardView(BaseView):
 
     def _ver(self, r):
         fields = [
-            ("Despacho", f"#{r['id']}"), ("Fecha", r["fecha"][:16]),
+            ("Fecha", r["fecha"][:16]),
             ("Beneficiario", f"{r['beneficiario']} ({r['cedula']})"),
             ("Combustible", r["tipo"]), ("Litros", f"{r['litros']:,.0f} L"),
             ("Estado", despacho_estado(r)), ("Operador", r["operador"]),
