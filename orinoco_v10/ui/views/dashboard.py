@@ -23,6 +23,7 @@ class DashboardView(BaseView):
             ("id", "#", 40), ("fecha", "Fecha", 130), ("beneficiario", "Beneficiario", 180),
             ("litros", "Litros", 90), ("tipo", "Tipo", 110), ("estado", "Estado", 110),
         ], page_size=ROWS_PER_PAGE, row_actions=self._row_actions)
+        self._ptbl.set_hidden_columns({"id"})
 
     def _go_inventario(self):
         if self.navigate:
@@ -57,6 +58,8 @@ class DashboardView(BaseView):
         self._cards.update("Pagos pendientes", str(s["pendientes"]))
         hoy = str(date.today())
         rows = self.db.get_despachos(limit=500, desde=hoy, hasta=hoy, incluir_anulados=False)
+        self._ptbl.table._last_fp = None
+        self._ptbl.set_hidden_columns({"id"})
         self._ptbl.load([self._fmt(r) for r in rows])
 
     @staticmethod

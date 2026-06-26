@@ -46,6 +46,8 @@ class PagosView(BaseView):
             ("monto", "Monto Bs", 110), ("referencia", "Referencia", 130),
             ("metodo", "Método", 110), ("estado", "Estado", 100),
         ], page_size=ROWS_PER_PAGE_COMPACT, row_actions=self._done_actions, expand=False)
+        self._pend.set_hidden_columns({"id"})
+        self._done.set_hidden_columns({"id"})
         ctk.CTkFrame(body, fg_color="transparent", height=24).pack()
 
     @staticmethod
@@ -77,7 +79,7 @@ class PagosView(BaseView):
             "monto": f"{r['monto_bs']:,.2f}", "_raw": r,
         } for r in self.db.get_despachos_pendientes()])
         self._done.table._last_fp = None
-        self._done.set_hidden_columns(set())
+        self._done.set_hidden_columns({"id"})
         self._done.load([{
             "id": p["id"], "fecha": p["fecha"][:16], "beneficiario": p["beneficiario"],
             "monto": f"{p['monto_bs']:,.2f}", "referencia": p["referencia"] or "—",
